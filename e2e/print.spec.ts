@@ -26,6 +26,11 @@ reflects the actual wrapped width rather than the length of a short sentence.
 const highlighted: string = "code should survive printing";
 \`\`\`
 
+\`\`\`
+plain fence, no language
+  indented second line
+\`\`\`
+
 | Column | Value |
 | ------ | ----- |
 | a      | 1     |
@@ -127,16 +132,16 @@ test.describe('print', () => {
     expect(note).toContain('not loaded');
   });
 
-  test('keeps code legible without background colour', async ({ page }) => {
+  test('prints a highlighted block whole, and in black', async ({ page }) => {
     // Highlighting is applied by the renderer after paint now, not baked into
     // the tree by the pipeline, so the upgraded block has to be waited for.
-    // Worth knowing about the real print path: a block below the fold is
-    // upgraded when `beforeprint` fires, and the browser does not wait for the
-    // round trip — so a first print of a long document can put plain code on
-    // the page. The rule asserted here is why that is survivable: print forces
-    // every token to black anyway, and what is lost is bold and italic
-    // emphasis rather than legibility.
     await page.locator('.lmd-document .shiki span').first().waitFor();
+
+    // Completeness first: a highlighter that drops or reorders a token prints
+    // code that is *wrong*, which is worse on paper than code that is plain,
+    // because nothing on the page says it happened.
+    const code = await page.locator('.lmd-document .shiki').first().textContent();
+    expect(code?.trimEnd()).toBe('const highlighted: string = "code should survive printing";');
 
     // Printers drop backgrounds, and Shiki's mid-tone token colours turn to
     // muddy grey, so printed code is forced to black.
@@ -146,5 +151,40 @@ test.describe('print', () => {
     });
 
     expect(colour).toBe('rgb(0, 0, 0)');
+  });
+
+  test('prints an unhighlighted block whole, and legibly', async ({ page }) => {
+    // The path this asserts is not an edge case. A fence with no language is
+    // never upgraded at all, and a block below the fold is upgraded only when
+    // `beforeprint` fires — asynchronously, through a worker the browser does
+    // not wait for — so a first print of a long document puts plain code on the
+    // page. That is the documented behaviour rather than a defect to design
+    // around: print forces every token to black regardless, so what a plain
+    // block loses is bold and italic emphasis, not a character of code.
+    // Selected by its content, not by position: every fence is a plain `pre`
+    // until its upgrade arrives, so "the first unhighlighted block" is whichever
+    // one the race left behind.
+    const plain = page
+      .locator('.lmd-code-block pre:not(.shiki)')
+      .filter({ hasText: 'plain fence' });
+
+    // Exact, not normalized: indentation is meaning in a code block, and
+    // Playwright's text matchers would collapse it.
+    expect(await plain.textContent()).toBe('plain fence, no language\n  indented second line\n');
+
+    const style = await plain.evaluate((node) => {
+      const computed = getComputedStyle(node);
+      return {
+        colour: computed.color,
+        background: computed.backgroundColor,
+        whiteSpace: computed.whiteSpace,
+      };
+    });
+
+    expect(style.colour).toBe('rgb(0, 0, 0)');
+    expect(style.background).toBe('rgb(255, 255, 255)');
+    // Code cannot scroll on paper: without wrapping, a long line is cropped at
+    // the page edge and the rest of it is simply gone.
+    expect(style.whiteSpace).toBe('pre-wrap');
   });
 });
