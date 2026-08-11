@@ -2,7 +2,9 @@ import { clearAll } from './db';
 import { clearPrefs } from './prefs';
 
 export { clearAll, getDB, isAvailable, requestPersistence } from './db';
-export type { RecentDocument, StoredPrefs } from './db';
+export type { RecentDocument, StoredDraft, StoredPrefs } from './db';
+export { discardDraft, listDrafts, saveDraft } from './drafts';
+export type { DraftInput } from './drafts';
 export { DEFAULT_PREFS, clearPrefs, loadPrefs, savePrefs } from './prefs';
 export {
   ensureReadPermission,

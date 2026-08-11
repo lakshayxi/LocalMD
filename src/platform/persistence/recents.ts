@@ -1,4 +1,5 @@
 import { getDB, requestPersistence, type RecentDocument } from './db';
+import { isSameEntry } from './same-entry';
 
 /**
  * Recently opened documents.
@@ -63,26 +64,6 @@ export async function recordRecent(
     void requestPersistence();
   } catch {
     // Recents are a convenience; failing to record one must not break opening.
-  }
-}
-
-/**
- * Handle comparison that cannot take the whole feature down with it.
- *
- * A stored entry that has lost its methods — an older schema, a partially
- * written record, an engine whose serialization differs — would otherwise throw
- * on the first comparison and abort the enclosing write, so a single bad row
- * would silently stop *every* future document from being recorded. Treating an
- * uncomparable entry as "not this file" costs at worst one duplicate row.
- */
-async function isSameEntry(
-  stored: FileSystemFileHandle,
-  candidate: FileSystemFileHandle,
-): Promise<boolean> {
-  try {
-    return await stored.isSameEntry(candidate);
-  } catch {
-    return false;
   }
 }
 

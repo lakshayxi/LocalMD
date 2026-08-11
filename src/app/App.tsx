@@ -8,6 +8,7 @@ import { PrivacyPage } from './components/PrivacyPage';
 import { Toast } from './components/Toast';
 import { Workspace } from './components/Workspace';
 import { useDocument } from './store';
+import { useNavigationGuard } from './use-navigation-guard';
 import { usePrintPreparation } from './use-print-preparation';
 import { useRoute } from './use-route';
 import { useShortcuts } from './use-shortcuts';
@@ -26,6 +27,7 @@ export function App() {
   const [paletteOpen, setPaletteOpen] = useState(false);
 
   usePrintPreparation();
+  useNavigationGuard();
 
   // Preferences were already applied to <html> by public/theme-init.js before
   // first paint; this reads them into React state and loads the recents list.

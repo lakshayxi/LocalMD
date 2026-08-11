@@ -28,7 +28,11 @@ function ClearLocalData() {
   const [phase, setPhase] = useState<'idle' | 'confirming' | 'done'>('idle');
 
   if (phase === 'done') {
-    return <p role="status">Cleared. Recent documents and preferences are gone from this browser.</p>;
+    return (
+      <p role="status">
+        Cleared. Recent documents, unsaved drafts, and preferences are gone from this browser.
+      </p>
+    );
   }
 
   async function clear() {
@@ -138,11 +142,27 @@ export function PrivacyPage({ onClose }: { onClose: () => void }) {
 
         <h3>Local storage is not encrypted by us</h3>
         <p>
-          Two things are kept in your browser&rsquo;s own storage: your reading preferences, and a
-          list of recently opened documents. The recents list holds each file&rsquo;s{' '}
-          <strong>name and a handle</strong> — a reference your browser can use to reopen it — and{' '}
-          <strong>never any of its contents</strong>, not even a preview line. Once editing ships,
-          unsaved drafts will be kept there too.
+          Three things are kept in your browser&rsquo;s own storage: your reading preferences, a
+          list of recently opened documents, and a draft of work you have not saved. The recents
+          list holds each file&rsquo;s <strong>name and a handle</strong>, a
+          reference your browser can use to reopen it, and <strong>never any of its contents</strong>
+          , not even a preview line.
+        </p>
+        <p className="lmd-callout">
+          Drafts are the exception, and they do hold your text. If you edit a document and leave the
+          tab — closing it, reloading, or switching away — LocalMD writes the unsaved version into
+          your browser&rsquo;s storage so a lost tab does not cost you the edit. It is written{' '}
+          <strong>only while there are unsaved changes</strong>, and it is deleted as soon as the
+          work is safe somewhere else: the moment you save or download, and the moment you close the
+          document and confirm you are discarding it. A document you only read is never written
+          anywhere. At most eight drafts are kept, and none for longer than seven days.
+        </p>
+        <p>
+          Nothing in a draft is ever sent anywhere; the policy above applies to it exactly as it
+          does to everything else. But it does mean text you have not saved can sit in browser
+          storage until you save it, discard it, or clear it below. In this build the draft is
+          written but not yet offered back to you — restoring one arrives in the next update, and
+          when it does it will ask rather than replace what you have open.
         </p>
         <p>
           Anything with access to your browser profile can read all of it. LocalMD does not add

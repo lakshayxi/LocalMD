@@ -5,11 +5,13 @@ import type { DocumentContents, DocumentSource, SaveOutcome } from '@/platform/f
 import { FileHandleSource } from '@/platform/files';
 import type { RecentDocument, StoredPrefs } from '@/platform/persistence';
 import {
+  discardDraft,
   ensureReadPermission,
   forgetRecent,
   listRecents,
   loadPrefs,
   recordRecent,
+  saveDraft,
   savePrefs,
 } from '@/platform/persistence';
 // Type-only imports above are erased at build time; the pipeline itself is
@@ -70,6 +72,15 @@ interface DocumentState {
   mode: Mode;
   /** Edited since it was last saved. */
   dirty: boolean;
+  /**
+   * The draft row this document owns, once it has been flushed at least once.
+   *
+   * Held so that repeated flushes overwrite one row instead of accumulating,
+   * and so that discarding on save knows exactly what to delete. Null means
+   * nothing of this document is in storage — which is the state every saved or
+   * unedited document must be in.
+   */
+  draftId: string | null;
   saving: boolean;
   /** Transient feedback for a save. A save with no acknowledgement is a save you do not trust. */
   notice: Notice | null;
@@ -86,6 +97,7 @@ interface DocumentState {
   forget: (id: string) => Promise<void>;
   setMode: (mode: Mode) => Promise<void>;
   updateText: (text: string) => void;
+  flushDraft: () => void;
   save: () => Promise<void>;
   saveAs: () => Promise<void>;
   dismissNotice: () => void;
@@ -128,6 +140,54 @@ function cancelPreview(): void {
 }
 
 /**
+ * Drops this document's draft, because its work is no longer unsaved.
+ *
+ * Clearing `draftId` first is what makes it safe to call from anywhere: the
+ * delete is fire-and-forget, and a flush racing behind it would otherwise be
+ * able to re-address the row we just asked to be rid of.
+ */
+function forgetDraft(
+  set: (partial: Partial<DocumentState>) => void,
+  get: () => DocumentState,
+): void {
+  const { draftId } = get();
+  if (!draftId) return;
+
+  set({ draftId: null });
+  void discardDraft(draftId);
+}
+
+/**
+ * Asks before unsaved work goes away, and reports whether to go ahead.
+ *
+ * Both paths that can lose an edit from inside the app — closing the document
+ * and opening another over it — run through here, so the guard cannot be
+ * forgotten at a call site the way it would be if each asked for itself.
+ *
+ * A native confirm rather than a designed modal, on purpose: it is the same
+ * affordance the browser uses for closing a dirty tab, it cannot be missed or
+ * mis-clicked past, and a bespoke dialog for a once-in-a-while question would
+ * be a lot of surface to maintain.
+ *
+ * Answering yes really does discard. Unlike a tab that simply went away, this
+ * is a decision, and leaving a draft behind after someone has said "discard"
+ * would make the recovery prompt an argument with the reader. The net catches
+ * what you lose, not what you choose to throw away.
+ */
+function confirmDiscard(
+  set: (partial: Partial<DocumentState>) => void,
+  get: () => DocumentState,
+): boolean {
+  const { dirty, source } = get();
+  if (!dirty || !source) return true;
+
+  if (!window.confirm(`"${source.name}" has unsaved changes. Discard them?`)) return false;
+
+  forgetDraft(set, get);
+  return true;
+}
+
+/**
  * The shared body of Save and Save As.
  *
  * Both have the same shape and the same three outcomes, and the difference —
@@ -160,6 +220,7 @@ async function performSave(
       // "Pasted document" and is written as "Pasted document.md", and the
       // message has to name the file that actually exists.
       set({ dirty: false, notice: { kind: 'info', message: `Downloaded ${outcome.name}.` } });
+      forgetDraft(set, get);
       return;
     }
 
@@ -170,6 +231,11 @@ async function performSave(
       dirty: false,
       notice: { kind: 'info', message: `Saved ${outcome.source.name}.` },
     });
+
+    // The file on disk is now the better copy, so the draft has nothing left to
+    // protect — and keeping it would leave the text of a saved document in
+    // storage, which is the one thing this store promises not to do.
+    forgetDraft(set, get);
 
     if (outcome.source instanceof FileHandleSource) {
       await recordRecent(outcome.source.handle, outcome.source.size);
@@ -209,6 +275,7 @@ export const useDocument = create<DocumentState>((set, get) => ({
   allowRemoteContent: false,
   mode: 'view',
   dirty: false,
+  draftId: null,
   saving: false,
   notice: null,
   theme: 'system',
@@ -229,7 +296,11 @@ export const useDocument = create<DocumentState>((set, get) => ({
   },
 
   async open(source) {
-    set({ status: 'loading', error: null, source });
+    // Opening one document over another that is mid-edit loses the same work a
+    // tab close would, and has to ask the same question.
+    if (!confirmDiscard(set, get)) return;
+
+    set({ status: 'loading', error: null, source, draftId: null });
 
     try {
       const { text, shape } = await source.read();
@@ -314,6 +385,43 @@ export const useDocument = create<DocumentState>((set, get) => ({
     if (get().mode === 'split') schedulePreview(get);
   },
 
+  /**
+   * Writes the current unsaved text to the draft store.
+   *
+   * Synchronous up to the point where it hands off, and that is the whole
+   * design. It is called from teardown — `visibilitychange`, `pagehide`, and
+   * the moment before state is cleared — where reading the store later would
+   * read a document that is already gone. Everything the write needs is
+   * captured here, on the caller's stack, and the write itself is left to
+   * finish on its own.
+   *
+   * Deliberately does nothing when the document is clean: an unedited document
+   * has nothing worth keeping, and writing one would put text into storage for
+   * a reader who only ever read.
+   */
+  flushDraft() {
+    const { source, text, shape, dirty, status, draftId } = get();
+    if (!source || !shape || !dirty || status !== 'ready') return;
+
+    // Minted here rather than inside the write, and kept for the rest of the
+    // document's life. A teardown fires `visibilitychange` and `pagehide` in the
+    // same tick, so the second flush starts long before the first has landed —
+    // deciding the row up front is what makes it an overwrite instead of a
+    // second copy of the same unsaved work.
+    const id = draftId ?? crypto.randomUUID();
+    if (id !== draftId) set({ draftId: id });
+
+    void saveDraft({
+      id,
+      name: source.name,
+      text,
+      shape,
+      // Only a handle survives a reload, so only a handle-backed document can be
+      // recognised as "the same file" on the way back in.
+      handle: source instanceof FileHandleSource ? source.handle : null,
+    });
+  },
+
   async setMode(mode) {
     const { mode: current, status } = get();
     if (mode === current || status !== 'ready') return;
@@ -364,6 +472,10 @@ export const useDocument = create<DocumentState>((set, get) => ({
   },
 
   close() {
+    // Every close path runs through here — the wordmark, the palette, and
+    // whatever gets added later.
+    if (!confirmDiscard(set, get)) return;
+
     // A heading fragment belongs to the document that was open. Left in the
     // URL, it would scroll the *next* document to whichever of its headings
     // happened to share the slug. Done here rather than in an effect because
@@ -386,6 +498,7 @@ export const useDocument = create<DocumentState>((set, get) => ({
       allowRemoteContent: false,
       mode: 'view',
       dirty: false,
+      draftId: null,
       notice: null,
     });
   },
