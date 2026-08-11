@@ -30,7 +30,30 @@ export type SaveOutcome =
   | { kind: 'saved'; source: DocumentSource }
   /** Carries the name actually written, which is not always the display name. */
   | { kind: 'downloaded'; name: string }
-  | { kind: 'cancelled' };
+  | { kind: 'cancelled' }
+  /**
+   * The file changed underneath us and nothing was written.
+   *
+   * Modelled as an outcome rather than an error for the same reason `cancelled`
+   * is: nothing went wrong. Someone else edited the file, which is a normal
+   * thing for a file to have happen, and the only wrong answer is to overwrite
+   * it without saying so. Carries the mtime found on disk so the caller can
+   * describe what it is refusing to replace.
+   */
+  | { kind: 'conflict'; lastModified: number };
+
+/**
+ * Modifiers for a save.
+ *
+ * Exists for exactly one thing today, and that thing must never be inferred:
+ * overwriting a file that changed underneath the reader is a decision only the
+ * reader can make, so it travels as an explicit argument from the control they
+ * pressed rather than as state a save path could quietly find itself in.
+ */
+export interface SaveOptions {
+  /** Write even though the file no longer matches what was read. */
+  overwrite?: boolean;
+}
 
 /**
  * A document's origin, abstracted so nothing above this layer knows whether the
@@ -64,9 +87,15 @@ export interface DocumentSource {
    * was opened, and keeps that guarantee visible rather than hidden in state
    * cached at read time.
    */
-  save(contents: DocumentContents): Promise<SaveOutcome>;
+  save(contents: DocumentContents, options?: SaveOptions): Promise<SaveOutcome>;
 
-  /** Always asks where to put it, and never overwrites the original. */
+  /**
+   * Always asks where to put it, and never overwrites the original.
+   *
+   * Takes no `SaveOptions`, deliberately: a save that picks its own destination
+   * cannot collide with an external edit, so there is nothing here to override.
+   * This is the escape hatch a conflict banner points at.
+   */
   saveAs(contents: DocumentContents, suggestedName?: string): Promise<SaveOutcome>;
 }
 

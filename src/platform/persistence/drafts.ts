@@ -1,5 +1,5 @@
 import type { TextShape } from '@/core/text/encoding';
-import { getDB, requestPersistence, type StoredDraft } from './db';
+import { currentWriteEpoch, getDB, requestPersistence, type StoredDraft } from './db';
 import { isSameEntry } from './same-entry';
 
 /**
@@ -89,12 +89,17 @@ export async function saveDraft(input: DraftInput): Promise<string | null> {
     const id = input.id ?? crypto.randomUUID();
     if (retired.has(id)) return null;
 
+    // Which side of a wipe this write started on. Captured before the first
+    // suspension, compared after it: a write that began before "clear local
+    // data" must not land after it, however far along it had got. See db.ts.
+    const epoch = currentWriteEpoch();
+
     const db = await getDB();
     // Checked again on the far side of the await. Opening the database is the
     // long suspension in this function and therefore the likely place for a
-    // discard to arrive; below this line the `put` is issued synchronously, so
-    // there is no further gap for one to slip into.
-    if (retired.has(id)) return null;
+    // discard or a wipe to arrive; below this line the `put` is issued
+    // synchronously, so there is no further gap for one to slip into.
+    if (retired.has(id) || currentWriteEpoch() !== epoch) return null;
 
     await db.put('drafts', {
       id,

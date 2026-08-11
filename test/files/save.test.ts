@@ -20,6 +20,8 @@ class FakeWritable {
   readonly chunks: string[] = [];
   aborted = false;
   closed = false;
+  /** Set by the handle: closing is what commits, and committing moves the mtime. */
+  onClose?: (written: string) => void;
 
   constructor(private readonly onWrite?: () => void) {}
 
@@ -29,6 +31,7 @@ class FakeWritable {
   }
   async close() {
     this.closed = true;
+    this.onClose?.(this.chunks.join(''));
   }
   async abort() {
     this.aborted = true;
@@ -40,21 +43,40 @@ class FakeHandle {
   writable = new FakeWritable();
   permission: PermissionState = 'granted';
   requested = 0;
+  /** Bumped by `changeOnDisk`, the way a real file's mtime moves. */
+  lastModified = 1_000;
+  /** Set to make the file unreachable, as a deleted or moved one would be. */
+  missing = false;
 
   constructor(
     readonly name: string,
-    private readonly content = '',
+    private content = '',
   ) {}
 
   async getFile() {
+    if (this.missing) throw new DOMException('not found', 'NotFoundError');
     return {
       size: this.content.length,
-      lastModified: 0,
+      lastModified: this.lastModified,
       text: async () => this.content,
     };
   }
 
+  /** Somebody else wrote to this file: a formatter, a git checkout, another editor. */
+  changeOnDisk(content: string, lastModified = this.lastModified + 5_000) {
+    this.content = content;
+    this.lastModified = lastModified;
+  }
+
   async createWritable() {
+    // A committed write moves the file's mtime and changes its contents, which
+    // is the behaviour the conflict check is reading. A fake that held the mtime
+    // still would make every save look conflict-free and quietly excuse the one
+    // bug most worth catching: our own write being mistaken for someone else's.
+    this.writable.onClose = (written) => {
+      this.content = written;
+      this.lastModified += 1_000;
+    };
     return this.writable;
   }
 
@@ -192,6 +214,135 @@ describe('FileHandleSource.save', () => {
     // what leaves the reader's original file intact.
     expect(handle.writable.aborted).toBe(true);
     expect(handle.writable.closed).toBe(false);
+  });
+});
+
+describe('external changes', () => {
+  /**
+   * The guarantee: LocalMD never silently replaces a file that changed
+   * underneath the reader.
+   *
+   * It lives in `save` rather than in the caller on purpose — every route to
+   * overwriting someone's file goes through this one method, so a save path
+   * added later cannot forget to ask. These tests are the whole of the
+   * automated coverage for it: driving a real File System Access handle needs a
+   * picker no test can operate, so the store wiring above it is verified by
+   * hand on Chrome and Edge alongside the other handle checks.
+   */
+
+  it('refuses to write over a file that changed since it was read', async () => {
+    const handle = new FakeHandle('doc.md', 'original\n');
+    const source = sourceFor(handle);
+    const contents = await source.read();
+
+    handle.changeOnDisk('somebody else got here first\n');
+
+    expect(await source.save({ ...contents, text: 'mine\n' })).toEqual({
+      kind: 'conflict',
+      lastModified: handle.lastModified,
+    });
+    // The refusal has to be total. A partial write would be worse than either
+    // version surviving intact.
+    expect(handle.written).toBe('');
+  });
+
+  it('treats an older timestamp as suspicious too', async () => {
+    const handle = new FakeHandle('doc.md', 'original\n');
+    const source = sourceFor(handle);
+    const contents = await source.read();
+
+    // Backwards is not benign: a restore from backup, a `git checkout` of an
+    // older commit, a sync client writing a stale copy and a clock that stepped
+    // back all land here, and every one of them means the bytes on disk are
+    // something the reader has not seen.
+    handle.changeOnDisk('an older version\n', 500);
+
+    expect((await source.save(contents)).kind).toBe('conflict');
+    expect(handle.written).toBe('');
+  });
+
+  it('does not prompt for write permission on a save it is going to refuse', async () => {
+    const handle = new FakeHandle('doc.md', 'original\n');
+    handle.permission = 'prompt';
+    const source = sourceFor(handle);
+    const contents = await source.read();
+
+    handle.changeOnDisk('theirs\n');
+    await source.save(contents);
+
+    // Answering a permission dialog for a write that was never going to happen
+    // teaches the reader that the dialog does not mean anything.
+    expect(handle.requested).toBe(0);
+  });
+
+  it('writes when the reader has said to overwrite', async () => {
+    const handle = new FakeHandle('doc.md', 'original\n');
+    const source = sourceFor(handle);
+    const contents = await source.read();
+
+    handle.changeOnDisk('theirs\n');
+
+    expect((await source.save({ ...contents, text: 'mine\n' }, { overwrite: true })).kind).toBe(
+      'saved',
+    );
+    expect(handle.written).toBe('mine\n');
+  });
+
+  it('adopts the file it just wrote as the new baseline', async () => {
+    const handle = new FakeHandle('doc.md', 'original\n');
+    const source = sourceFor(handle);
+    const contents = await source.read();
+
+    // Committing the write moves the mtime, as it does on a real filesystem.
+    // Without re-stating the baseline afterwards our own save would look like
+    // somebody else's edit, and the very next ⌘S would be refused — a conflict
+    // banner about a change the reader had just made themselves.
+    await source.save(contents);
+    expect(handle.lastModified).not.toBe(1_000);
+
+    expect((await source.save(contents)).kind).toBe('saved');
+  });
+
+  it('still saves a file that has no baseline to compare against', async () => {
+    const handle = new FakeHandle('doc.md', 'original\n');
+    const source = sourceFor(handle);
+
+    // Never read, so nothing is known about what was there. Refusing on missing
+    // evidence rather than on contrary evidence would leave the reader unable to
+    // save at all.
+    expect((await source.save({ text: 'mine\n', shape: decodeText('x\n').shape })).kind).toBe(
+      'saved',
+    );
+  });
+
+  it('still saves a file that has been deleted underneath it', async () => {
+    const handle = new FakeHandle('doc.md', 'original\n');
+    const source = sourceFor(handle);
+    const contents = await source.read();
+
+    handle.missing = true;
+
+    // A file we cannot stat is usually one that is gone, and writing recreates
+    // it — which is the only way the reader has left to keep their work. The
+    // check exists to stop us replacing someone's edit, not to strand people.
+    expect((await source.save(contents)).kind).toBe('saved');
+  });
+
+  it('adopts a baseline recorded elsewhere, for a recovered draft', async () => {
+    const handle = new FakeHandle('doc.md', 'original\n');
+    const source = sourceFor(handle);
+
+    // What recovery does: the source is built from a stored handle and never
+    // read, so the only baseline available is the one the draft carried. If it
+    // were not adopted, the source would have nothing to compare and a restored
+    // draft would overwrite a file that had moved on while it was gone.
+    source.adoptBaseline(1_000);
+    handle.changeOnDisk('changed while the draft was in storage\n');
+
+    expect((await source.save({ text: 'recovered\n', shape: decodeText('x\n').shape })).kind).toBe(
+      'conflict',
+    );
+    expect(handle.written).toBe('');
   });
 });
 

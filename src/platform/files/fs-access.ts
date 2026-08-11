@@ -1,5 +1,11 @@
 import { decodeText, encodeText } from '@/core/text/encoding';
-import type { DocumentContents, DocumentSource, SaveOutcome, SourceKind } from './types';
+import type {
+  DocumentContents,
+  DocumentSource,
+  SaveOptions,
+  SaveOutcome,
+  SourceKind,
+} from './types';
 import { UnsupportedFileError } from './types';
 import { isAcceptedFilename } from './sources';
 
@@ -76,21 +82,65 @@ export class FileHandleSource implements DocumentSource {
    * ⌘S puts the bytes back where they came from, with the line endings and BOM
    * they arrived with. A permission refusal is reported as `cancelled` rather
    * than thrown — the reader said no, which is an answer, not a fault.
+   *
+   * **Refuses if the file no longer matches what was read.** The check lives
+   * here rather than in the caller so that no save path can be written that
+   * forgets it: every route to overwriting a user's file goes through this
+   * method, and the only way past the check is an `overwrite` the reader asked
+   * for. Any mtime difference counts, not just a newer one — see the note on
+   * `lastModified`.
    */
-  async save(contents: DocumentContents): Promise<SaveOutcome> {
+  async save(contents: DocumentContents, options: SaveOptions = {}): Promise<SaveOutcome> {
+    // Before the permission prompt, not after: a save that is about to be
+    // refused should not first make the reader answer a dialog for it.
+    if (!options.overwrite) {
+      // Stat'd here and now. A reading taken when the window regained focus is
+      // already history by the time ⌘S arrives, and the gap between them is
+      // exactly long enough for a `git checkout` to land in.
+      const current = await this.getFileMeta();
+
+      // A file that cannot be stat'd is almost always one that has been deleted,
+      // and writing recreates it — which is what the reader wants and the only
+      // way they have left to keep their work in a file. Refusing on missing
+      // evidence would strand them; refusing on *contrary* evidence is the point.
+      if (current && this.cachedModified !== null && current.lastModified !== this.cachedModified) {
+        return { kind: 'conflict', lastModified: current.lastModified };
+      }
+    }
+
     if (!(await ensureWritePermission(this.handle))) return { kind: 'cancelled' };
 
     await writeToHandle(this.handle, encodeText(contents.text, contents.shape));
 
     // The file on disk is now a version we have never stat'd. Re-reading its
-    // metadata is what keeps `size` right in recents, and what moves the
-    // baseline a later draft branches from onto the copy we just wrote rather
-    // than leaving it on the one we opened.
+    // metadata keeps `size` right in recents, moves the baseline a later draft
+    // branches from onto the copy we just wrote, and — since this is also the
+    // baseline the conflict check reads — stops our own write being mistaken
+    // for somebody else's the next time ⌘S is pressed.
+    await this.refreshMeta();
+
+    return { kind: 'saved', source: this };
+  }
+
+  /** Re-stats the file, adopting what is on disk as the current baseline. */
+  async refreshMeta(): Promise<void> {
     const meta = await this.getFileMeta();
     this.cachedSize = meta?.size ?? null;
     this.cachedModified = meta?.lastModified ?? null;
+  }
 
-    return { kind: 'saved', source: this };
+  /**
+   * Adopts a baseline recorded somewhere else.
+   *
+   * For recovery: a draft carries the mtime of the file it branched from, and a
+   * document restored from one has to be compared against *that*, not against
+   * whatever is on disk at the moment it is restored. Without this the source
+   * would arrive with no baseline at all, the conflict check would have nothing
+   * to compare, and ⌘S would silently overwrite a file that had moved on since
+   * the draft was written — which is precisely the hole recovery left open.
+   */
+  adoptBaseline(lastModified: number | null): void {
+    this.cachedModified = lastModified;
   }
 
   saveAs(contents: DocumentContents, suggestedName?: string): Promise<SaveOutcome> {
@@ -101,8 +151,12 @@ export class FileHandleSource implements DocumentSource {
   }
 
   /**
-   * Modification time and size, for the external-change detection M4 needs.
-   * Reading it costs a `getFile()` call, so it is separate from `read`.
+   * What the file looks like on disk *right now*.
+   *
+   * Always a fresh `getFile()`, never the cached baseline — the whole point of
+   * every caller is to find out whether the two still agree. Returns null when
+   * the file cannot be reached at all, which is a different problem from having
+   * changed and is left to the caller to interpret.
    */
   async getFileMeta(): Promise<{ lastModified: number; size: number } | null> {
     try {
@@ -183,8 +237,16 @@ export async function saveWithPicker(
     });
 
     await writeToHandle(handle, encoded);
+
     // The document now belongs to the new file: subsequent saves write here.
-    return { kind: 'saved', source: new FileHandleSource(handle) };
+    // Stat it before handing it back, so the new source starts with a baseline.
+    // Without one the conflict check has nothing to compare and every document
+    // that arrived through Save As would be exempt from it — the quiet kind of
+    // gap where a guarantee holds everywhere except the path nobody tested.
+    const source = new FileHandleSource(handle);
+    await source.refreshMeta();
+
+    return { kind: 'saved', source };
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') {
       return { kind: 'cancelled' };

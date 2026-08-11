@@ -106,6 +106,15 @@ interface DocumentState {
   /** Edited since it was last saved. */
   dirty: boolean;
   /**
+   * The file changed on disk since we last read or wrote it.
+   *
+   * Sticky once set: it is cleared by resolving the situation — reloading,
+   * overwriting, or saving elsewhere — and never by time passing or by another
+   * check happening to run. A banner that cleared itself would be a banner the
+   * reader could miss and then act against.
+   */
+  externalChange: boolean;
+  /**
    * The draft row this document owns, once it has been flushed at least once.
    *
    * Held so that repeated flushes overwrite one row instead of accumulating,
@@ -143,6 +152,11 @@ interface DocumentState {
   flushDraft: () => void;
   save: () => Promise<void>;
   saveAs: () => Promise<void>;
+  /** The plan's *Keep mine*: write over a file that changed underneath us. */
+  overwrite: () => Promise<void>;
+  /** The plan's *Load theirs*: throw away what is here and re-read the file. */
+  reloadFromDisk: () => Promise<void>;
+  checkExternalChange: () => Promise<void>;
   dismissNotice: () => void;
   close: () => void;
   setAllowRemoteContent: (allow: boolean) => Promise<void>;
@@ -295,21 +309,20 @@ function confirmDiscard(
  * seen. Trusting an older timestamp would wave through exactly the collisions
  * hardest to reason about afterwards.
  *
- * **This is the narrow half of external-change detection, and it is explicitly
- * not enough to deploy on.** It compares the same mtime the full check will, but
- * only at the moment of recovery, and it only *warns* — ⌘S afterwards still
- * overwrites. Guarding the save of an already-open document whose file moved
- * under it is M4's external-change item, and it must land before this reaches
- * production. Until it does, a restored draft can still replace a file that
- * changed while it was gone.
+ * The baseline recorded in the draft is handed to the source rather than
+ * discarded, which is what closes the hole recovery used to leave: without it a
+ * restored document would arrive with nothing to compare, and ⌘S would write
+ * over a file that had moved on since the draft was written. Reporting the
+ * mismatch is now the smaller half of the job — refusing the save is the rest,
+ * and that lives in `FileHandleSource.save`.
  */
 async function adoptDraft(
   draft: StoredDraft,
-): Promise<{ source: DocumentSource; notice: Notice | null }> {
+): Promise<{ source: DocumentSource; notice: Notice | null; conflict: boolean }> {
   // Same name, so it saves as the file it came from rather than as "Untitled".
   const detached = () => new MemorySource(draft.name, draft.text);
 
-  if (!draft.handle) return { source: detached(), notice: null };
+  if (!draft.handle) return { source: detached(), notice: null, conflict: false };
 
   if ((await ensureReadPermission(draft.handle)) !== 'granted') {
     return {
@@ -318,6 +331,7 @@ async function adoptDraft(
         kind: 'info',
         message: `Restored. LocalMD no longer has access to ${draft.name}, so saving will ask where to put it.`,
       },
+      conflict: false,
     };
   }
 
@@ -331,27 +345,23 @@ async function adoptDraft(
         kind: 'info',
         message: `Restored, but ${draft.name} could not be found. Saving will ask where to put it.`,
       },
+      conflict: false,
     };
   }
 
-  if (draft.baseModified !== null && meta.lastModified !== draft.baseModified) {
-    return {
-      source,
-      // An error notice, which is the one kind that does not dismiss itself.
-      // This has to still be on screen when they reach for ⌘S.
-      //
-      // Worded without a direction, because the check has none: "no longer
-      // matches" is true whether the file moved forward or back, and claiming
-      // it changed *after* the draft would be a guess in the cases that matter
-      // most.
-      notice: {
-        kind: 'error',
-        message: `${draft.name} on disk no longer matches the version this draft came from. Saving will replace what is there now.`,
-      },
-    };
-  }
+  // The version this text was written against, not the one on disk now. Saving
+  // re-stats and compares against this, so a file that moved on while the draft
+  // was gone is refused rather than replaced.
+  source.adoptBaseline(draft.baseModified);
 
-  return { source, notice: null };
+  // Reported through the conflict banner rather than a toast: the banner is
+  // persistent and carries the three answers — save a copy, keep mine, load
+  // theirs — where a toast could only say that something was wrong.
+  return {
+    source,
+    notice: null,
+    conflict: draft.baseModified !== null && meta.lastModified !== draft.baseModified,
+  };
 }
 
 /**
@@ -379,6 +389,21 @@ async function performSave(
 
     if (outcome.kind === 'cancelled') return;
 
+    // Nothing was written, and nothing about the document changes: it stays
+    // dirty, it keeps its draft, and the reader keeps every option they had a
+    // moment ago. The banner carries the three ways out; this only has to say
+    // why the keystroke did not do what it usually does.
+    if (outcome.kind === 'conflict') {
+      set({
+        externalChange: true,
+        notice: {
+          kind: 'error',
+          message: `${source.name} changed on disk since you opened it. Nothing was written.`,
+        },
+      });
+      return;
+    }
+
     if (outcome.kind === 'downloaded') {
       // Dirty clears because the reader's work is now durable somewhere. Saying
       // otherwise would make the navigation guard nag about a document they
@@ -396,6 +421,10 @@ async function performSave(
     set({
       source: outcome.source,
       dirty: false,
+      // Whatever the disagreement was, this settles it: the bytes on disk are
+      // now ours, and the source re-stat'd itself as it wrote, so the baseline
+      // matches again. Save As settles it too, by pointing at a different file.
+      externalChange: false,
       notice: { kind: 'info', message: `Saved ${outcome.source.name}.` },
     });
 
@@ -442,6 +471,7 @@ export const useDocument = create<DocumentState>((set, get) => ({
   allowRemoteContent: false,
   mode: 'view',
   dirty: false,
+  externalChange: false,
   draftId: null,
   saving: false,
   notice: null,
@@ -491,6 +521,9 @@ export const useDocument = create<DocumentState>((set, get) => ({
         // the last one was edited would be the wrong default for a reader.
         mode: 'view',
         dirty: false,
+        // Just read, so it cannot already disagree with itself. Reset because
+        // this state belongs to the document, not to the session.
+        externalChange: false,
         notice: null,
       });
 
@@ -563,7 +596,7 @@ export const useDocument = create<DocumentState>((set, get) => ({
 
     set({ status: 'loading', error: null, draftId: null });
 
-    const { source, notice } = await adoptDraft(draft);
+    const { source, notice, conflict } = await adoptDraft(draft);
     const rendered = await renderMarkdown(draft.text, { allowRemoteContent: false });
 
     set({
@@ -584,6 +617,11 @@ export const useDocument = create<DocumentState>((set, get) => ({
       // single draft — the next flush overwrites what was just recovered
       // instead of filing a second copy of it alongside.
       draftId: draft.id,
+      // A draft written against a version of the file that is no longer there
+      // arrives already in conflict, and says so through the same banner a
+      // change noticed on focus would — with the same three answers rather than
+      // a warning the reader can only acknowledge.
+      externalChange: conflict,
       notice,
     });
 
@@ -704,6 +742,87 @@ export const useDocument = create<DocumentState>((set, get) => ({
     await performSave(set, get, (source, contents) => source.saveAs(contents));
   },
 
+  /**
+   * *Keep mine.* Writes over a file that changed underneath the reader.
+   *
+   * Deliberately a separate action rather than a retry of `save`, and reachable
+   * only from the conflict banner. Overwriting somebody's work has to be
+   * something the reader did, not something a keystroke fell through to on its
+   * second press.
+   */
+  async overwrite() {
+    await performSave(set, get, (source, contents) => source.save(contents, { overwrite: true }));
+  },
+
+  /**
+   * *Load theirs.* Throws away what is on screen and re-reads the file.
+   *
+   * A new source over the same handle rather than a re-read into the old one:
+   * the editor is keyed to the source's id, so reusing it would leave the old
+   * text on screen with the new file underneath it. An undo history that reaches
+   * back into a version of the file that no longer exists is not worth keeping
+   * either.
+   */
+  async reloadFromDisk() {
+    const { source, status } = get();
+    if (status !== 'ready' || !(source instanceof FileHandleSource)) return;
+
+    // Reloading over unsaved work loses exactly what closing would, so it asks
+    // the same question — and on yes, drops the draft with it.
+    if (!confirmDiscard(set, get)) return;
+
+    const reloaded = new FileHandleSource(source.handle);
+    set({ status: 'loading', error: null });
+
+    try {
+      const { text, shape } = await reloaded.read();
+      const rendered = await renderMarkdown(text, { allowRemoteContent: false });
+
+      set({
+        source: reloaded,
+        text,
+        shape,
+        rendered,
+        status: 'ready',
+        allowRemoteContent: false,
+        dirty: false,
+        externalChange: false,
+        notice: { kind: 'info', message: `Reloaded ${reloaded.name}.` },
+      });
+    } catch {
+      // The document is still here and still theirs. A failed reload must cost
+      // them nothing, so it goes back to exactly what was on screen — including
+      // the conflict, which is still true.
+      set({
+        status: 'ready',
+        notice: { kind: 'error', message: `${source.name} could not be read. It may have moved.` },
+      });
+    }
+  },
+
+  /**
+   * Asks whether the file still matches what we read.
+   *
+   * Runs when the window regains focus, which is the moment a reader most often
+   * comes back from having done something to the file somewhere else. Silent
+   * about everything except a genuine mismatch: no permission prompt (there is
+   * no user activation here, and asking would be an ambush), and no complaint
+   * about a file that cannot be reached, which is a different problem with a
+   * different answer.
+   */
+  async checkExternalChange() {
+    const { source, status, externalChange } = get();
+    // Already flagged, so there is nothing to learn and a banner already saying
+    // it. Re-running would only risk clearing what the reader has not answered.
+    if (status !== 'ready' || externalChange) return;
+    if (!(source instanceof FileHandleSource) || source.lastModified === null) return;
+
+    const current = await source.getFileMeta();
+    if (!current || current.lastModified === source.lastModified) return;
+
+    set({ externalChange: true });
+  },
+
   dismissNotice() {
     set({ notice: null });
   },
@@ -735,6 +854,7 @@ export const useDocument = create<DocumentState>((set, get) => ({
       allowRemoteContent: false,
       mode: 'view',
       dirty: false,
+      externalChange: false,
       draftId: null,
       notice: null,
     });

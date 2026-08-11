@@ -15,12 +15,22 @@ export async function readDrafts(page: Page): Promise<{ name: string; text: stri
         request.onerror = () => resolve([]);
         request.onsuccess = () => {
           const db = request.result;
-          if (!db.objectStoreNames.contains('drafts')) return resolve([]);
+
+          // Closed on every path. A connection left open at whatever version it
+          // found blocks the app's own upgrade, and the app then hangs waiting
+          // for a database the test is still holding — which surfaces as an
+          // unrelated timeout somewhere else entirely.
+          const done = (rows: { name: string; text: string }[]) => {
+            db.close();
+            resolve(rows);
+          };
+
+          if (!db.objectStoreNames.contains('drafts')) return done([]);
 
           const all = db.transaction('drafts', 'readonly').objectStore('drafts').getAll();
-          all.onerror = () => resolve([]);
+          all.onerror = () => done([]);
           all.onsuccess = () =>
-            resolve(
+            done(
               (all.result as { name: string; text: string }[]).map(({ name, text }) => ({
                 name,
                 text,

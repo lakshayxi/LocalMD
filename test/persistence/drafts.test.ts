@@ -60,6 +60,14 @@ async function freshModule() {
   return import('@/platform/persistence/drafts');
 }
 
+/** Both halves of the store, from the same fresh module registry. */
+async function freshModules() {
+  return {
+    drafts: await import('@/platform/persistence/drafts'),
+    db: await import('@/platform/persistence/db'),
+  };
+}
+
 describe('saveDraft', () => {
   it('keeps the text and the shape that will reproduce the file', async () => {
     const drafts = await freshModule();
@@ -251,6 +259,63 @@ describe('discardDraft', () => {
 
     expect((await drafts.listDrafts()).map((entry) => entry.text)).toEqual([
       'edited again afterwards',
+    ]);
+  });
+});
+
+describe('clearing local data', () => {
+  /**
+   * "Clear local data" has to mean it, and a wipe is several awaits long.
+   *
+   * The failure it has to survive: a draft flush already suspended when the
+   * reader presses the button, resuming afterwards and putting their text back
+   * into the store they just emptied — the control appearing to work, and the
+   * thing it promised to remove sitting there again a tick later.
+   *
+   * A barrier rather than retiring the id, because the document is very likely
+   * still open and still dirty. Retiring would switch off crash protection for
+   * the rest of its life without saying so, trading a visible failure for an
+   * invisible one.
+   */
+
+  it('does not let a write already in flight repopulate the store', async () => {
+    const { drafts, db } = await freshModules();
+    await drafts.saveDraft(draft({ text: 'earlier' }));
+
+    const inFlight = drafts.saveDraft(draft({ text: 'in flight when the wipe landed' }));
+    await db.clearAll();
+
+    // Asserted on the return value as well as the store: the refusal is the
+    // mechanism, and it is what stays true if the ordering underneath changes.
+    expect(await inFlight).toBeNull();
+    expect(await drafts.listDrafts()).toEqual([]);
+  });
+
+  it('protects work typed after the wipe', async () => {
+    const { drafts, db } = await freshModules();
+    await db.clearAll();
+
+    await drafts.saveDraft(draft({ text: 'typed after clearing' }));
+
+    expect((await drafts.listDrafts()).map((entry) => entry.text)).toEqual([
+      'typed after clearing',
+    ]);
+  });
+
+  it('keeps protecting the document that was open when the wipe happened', async () => {
+    // The property the barrier exists to preserve, and the reason it is not an
+    // id retirement: clearing storage must not silently cost an open, dirty
+    // document its net for the rest of the session. The same row is still
+    // writable the moment there is something new to write.
+    const { drafts, db } = await freshModules();
+
+    const id = await drafts.saveDraft(draft({ text: 'mid-edit' }));
+    await db.clearAll();
+
+    await drafts.saveDraft(draft({ id, text: 'still editing afterwards' }));
+
+    expect((await drafts.listDrafts()).map((entry) => entry.text)).toEqual([
+      'still editing afterwards',
     ]);
   });
 });

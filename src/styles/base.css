@@ -405,6 +405,40 @@ body {
   white-space: nowrap;
 }
 
+/* ---------- External-change conflict ---------- */
+
+/* Full width and directly under the header rather than sized to the prose
+   measure like the withheld-images notice. That one is an aside about the
+   document; this one is a fact about the file, and it has to be the first thing
+   read in every mode including Edit, where there is no prose column to sit in. */
+.lmd-conflict {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  padding: 0.6rem 0.9rem;
+  border-bottom: 1px solid var(--border-strong);
+  background: var(--warning-soft);
+  font-size: 0.8125rem;
+}
+
+.lmd-conflict-text {
+  flex: 1 1 20rem;
+  margin: 0;
+  color: var(--warning);
+}
+
+.lmd-conflict-text strong {
+  font-weight: 600;
+}
+
+.lmd-conflict-actions {
+  display: flex;
+  flex: none;
+  gap: 0.35rem;
+  font-size: 0.8125rem;
+}
+
 /* ---------- Draft recovery ---------- */
 
 .lmd-recovery {

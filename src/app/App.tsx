@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { createPastedDocument, openFile } from '@/platform/files';
 import { DropTarget } from './components/DropTarget';
+import { ExternalChangeNotice } from './components/ExternalChangeNotice';
 import { Header } from './components/Header';
 import { Landing } from './components/Landing';
 import { Palette } from './components/Palette';
@@ -10,6 +11,7 @@ import { Workspace } from './components/Workspace';
 import { useDocument } from './store';
 import { useNavigationGuard } from './use-navigation-guard';
 import { usePrintPreparation } from './use-print-preparation';
+import { useExternalChange } from './use-external-change';
 import { useRoute } from './use-route';
 import { useShortcuts } from './use-shortcuts';
 import { useSplitAvailable } from './use-media-query';
@@ -28,6 +30,7 @@ export function App() {
 
   usePrintPreparation();
   useNavigationGuard();
+  useExternalChange();
 
   // Preferences were already applied to <html> by public/theme-init.js before
   // first paint; this reads them into React state and loads the recents list.
@@ -105,6 +108,10 @@ export function App() {
   return (
     <DropTarget>
       <Header onOpenPrivacy={() => navigate('privacy')} />
+      {/* Above the workspace rather than inside it, so it is present in Read,
+          Edit and Split alike. A conflict is a fact about the document, not
+          about the mode someone happens to be looking at it in. */}
+      <ExternalChangeNotice />
       {status === 'ready' && rendered ? (
         <Workspace />
       ) : (

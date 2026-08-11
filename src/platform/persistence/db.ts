@@ -150,8 +150,33 @@ export async function requestPersistence(): Promise<boolean> {
   }
 }
 
+/**
+ * A barrier that separates writes begun before a wipe from those begun after.
+ *
+ * "Clear local data" has to mean it, and a wipe is several awaits long. A draft
+ * flush already suspended when the reader presses it would resume afterwards
+ * and put their text straight back into the store they just emptied — the
+ * control appearing to work, and the one thing it promised to remove sitting
+ * there again a tick later.
+ *
+ * A counter rather than retiring the id: the document is very likely still open
+ * and still dirty, and retiring its id would silently switch off crash
+ * protection for the rest of its life. That would trade a visible failure for
+ * an invisible one. Writes that *started* before the wipe are refused; the next
+ * edit, or the next flush on the way out, builds the net back up.
+ */
+let writeEpoch = 0;
+
+export function currentWriteEpoch(): number {
+  return writeEpoch;
+}
+
 /** Wipes everything. Backs the "clear local data" control the privacy page promises. */
 export async function clearAll(): Promise<void> {
+  // Synchronously, before the first await, so a write suspended right now sees
+  // the new epoch when it resumes rather than beating the wipe by a tick.
+  writeEpoch += 1;
+
   const db = await getDB();
   // Drafts belong here more than anything else does: they are the only store
   // that holds document text, so a "clear local data" that missed them would

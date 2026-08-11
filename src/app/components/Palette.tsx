@@ -286,6 +286,26 @@ function usePaletteGroups({
               },
             ]
           : []),
+        // Only while the file and the document actually disagree. These are the
+        // two answers ⌘S cannot give on its own once it starts refusing, and a
+        // reader who works from the keyboard should not have to reach for the
+        // banner's buttons to get at them.
+        ...(store.externalChange && store.source
+          ? [
+              {
+                id: 'overwrite',
+                label: `Overwrite ${store.source.name} with my version`,
+                hint: 'Changed on disk',
+                run: act(() => void store.overwrite()),
+              },
+              {
+                id: 'reload',
+                label: `Discard my changes and reload ${store.source.name}`,
+                hint: 'Changed on disk',
+                run: act(() => void store.reloadFromDisk()),
+              },
+            ]
+          : []),
         {
           id: 'outline',
           label: store.outlinePinned ? 'Hide the outline' : 'Show the outline',

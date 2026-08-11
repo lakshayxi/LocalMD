@@ -100,20 +100,39 @@ async function expectCleanInBothThemes(page: Page, skip: string[] = []) {
  * against the real thing in recovery.spec.ts and navigate.spec.ts.
  */
 async function seed(page: Page, store: 'drafts' | 'recents', row: Record<string, unknown>) {
-  await page.evaluate(
-    ({ store: name, row: value }) =>
-      new Promise<void>((resolve, reject) => {
-        const request = indexedDB.open('localmd');
-        request.onerror = () => reject(new Error('no storage'));
-        request.onsuccess = () => {
-          const transaction = request.result.transaction(name, 'readwrite');
-          transaction.objectStore(name).put(value);
-          transaction.oncomplete = () => resolve();
-          transaction.onerror = () => reject(new Error('write failed'));
-        };
-      }),
-    { store, row },
-  );
+  // Polled, because the app creates these object stores on its first hydrate and
+  // this can arrive first. Opening without a version would then *create* the
+  // database empty at version 1 and hold a connection against the upgrade the
+  // app is about to attempt — deadlocking it. So: close on every path, report
+  // whether the store was there yet, and try again if it was not.
+  await expect
+    .poll(
+      () =>
+        page.evaluate(
+          ({ store: name, row: value }) =>
+            new Promise<boolean>((resolve) => {
+              const request = indexedDB.open('localmd');
+              request.onerror = () => resolve(false);
+              request.onsuccess = () => {
+                const db = request.result;
+                const done = (ok: boolean) => {
+                  db.close();
+                  resolve(ok);
+                };
+
+                if (!db.objectStoreNames.contains(name)) return done(false);
+
+                const transaction = db.transaction(name, 'readwrite');
+                transaction.objectStore(name).put(value);
+                transaction.oncomplete = () => done(true);
+                transaction.onerror = () => done(false);
+              };
+            }),
+          { store, row },
+        ),
+      { message: `seeding the ${store} store` },
+    )
+    .toBe(true);
 
   await page.reload();
 }

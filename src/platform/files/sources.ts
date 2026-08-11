@@ -98,6 +98,9 @@ export class BlobFileSource implements DocumentSource {
    * A dropped or picked file cannot be written back to — the browser gave us
    * its bytes, not its location — so Save and Save As are the same operation.
    * The reader still chooses the destination wherever the picker exists.
+   *
+   * Takes no save options. Every save here writes somewhere new, so there is no
+   * original to collide with and nothing an `overwrite` could mean.
    */
   save(contents: DocumentContents): Promise<SaveOutcome> {
     return saveAsNewFile(contents, this.name);
