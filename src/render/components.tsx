@@ -1,5 +1,6 @@
 import type { ComponentProps, ReactNode } from 'react';
 import type { Components } from 'hast-util-to-jsx-runtime';
+import { CodeBlock } from './highlighting';
 import { Mermaid } from './Mermaid';
 
 /**
@@ -12,22 +13,6 @@ import { Mermaid } from './Mermaid';
  *
  * The overrides that do exist earn it by needing behavior, not appearance.
  */
-
-/**
- * Adds a copy button to fenced code.
- *
- * Copying a code block is the single most common thing a reader does with
- * technical documentation, and doing it by hand means selecting across a scroll
- * region. Syntax highlighting replaces the inner content in M2; this wrapper is
- * where it will attach.
- */
-function Pre(props: ComponentProps<'pre'>) {
-  return (
-    <div className="lmd-code-block">
-      <pre {...props} />
-    </div>
-  );
-}
 
 /**
  * Tables can exceed the prose measure, so they scroll inside their own
@@ -71,7 +56,7 @@ function extractText(children: ReactNode): string {
 }
 
 export const components: Components = {
-  pre: Pre,
+  pre: CodeBlock,
   table: Table,
   div: Div,
 };

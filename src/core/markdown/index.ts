@@ -1,4 +1,7 @@
 export { renderMarkdown } from './pipeline';
+export { sliceTree, SLICE_NODES } from './slice';
+export { highlightCode, languageOfClassNames, resolveLanguage } from './highlight';
+export type { Language } from './highlight';
 export { sanitizeSchema } from './sanitize-schema';
 export type {
   BlockedResource,

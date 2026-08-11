@@ -82,24 +82,15 @@ describe('frontmatter', () => {
 });
 
 describe('code blocks', () => {
-  it('highlights a known language', async () => {
+  // Highlighting itself moved out of the pipeline in M5 — the pipeline now
+  // leaves every fence as plain, tagged code and the renderer upgrades it
+  // afterwards. See test/markdown/highlight.test.ts.
+  it('leaves a known language tagged for the renderer to highlight', async () => {
     const result = await html('```typescript\nconst x = 1;\n```');
 
-    expect(result).toContain('shiki');
-    expect(result).toContain('const');
-  });
-
-  it('emits both themes as CSS variables so switching needs no re-highlight', async () => {
-    const result = await html('```typescript\nconst x = 1;\n```');
-
-    expect(result).toContain('--lmd-code-light:');
-    expect(result).toContain('--lmd-code-dark:');
-  });
-
-  it('resolves common language aliases', async () => {
-    const result = await html('```js\nconst x = 1;\n```');
-
-    expect(result).toContain('shiki');
+    expect(result).toContain('language-typescript');
+    expect(result).toContain('const x = 1;');
+    expect(result).not.toContain('shiki');
   });
 
   it('renders an unknown language as plain code rather than failing', async () => {

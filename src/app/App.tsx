@@ -28,6 +28,11 @@ export function App() {
   const splitAvailable = useSplitAvailable();
   const [route, navigate] = useRoute();
   const [paletteOpen, setPaletteOpen] = useState(false);
+  // Bumped when the document has finished mounting every batch. A deep link
+  // cannot scroll to a heading that has not been rendered yet, and since M5's
+  // batching the last heading arrives a few tasks after the first.
+  const [renderPass, setRenderPass] = useState(0);
+  const onRendered = useCallback(() => setRenderPass((pass) => pass + 1), []);
 
   usePrintPreparation();
   useNavigationGuard();
@@ -93,7 +98,7 @@ export function App() {
     if (!id || id.startsWith('/')) return;
 
     document.getElementById(id)?.scrollIntoView();
-  }, [rendered]);
+  }, [rendered, renderPass]);
 
   const palette = paletteOpen && (
     <Palette onClose={() => setPaletteOpen(false)} onOpenPrivacy={() => navigate('privacy')} />
@@ -118,7 +123,7 @@ export function App() {
           about the mode someone happens to be looking at it in. */}
       <ExternalChangeNotice />
       {status === 'ready' && rendered ? (
-        <Workspace />
+        <Workspace onRendered={onRendered} />
       ) : (
         <Landing onOpenPrivacy={() => navigate('privacy')} />
       )}

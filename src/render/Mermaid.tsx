@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { scrubSvgCss } from '@/core/security/svg-css';
+import { useNearViewport } from './use-near-viewport';
 
 /**
  * Renders a Mermaid diagram after mount.
@@ -114,44 +115,9 @@ let diagramCounter = 0;
 
 export function Mermaid({ source }: { source: string }) {
   const [status, setStatus] = useState<Status>({ state: 'pending' });
-  const container = useRef<HTMLDivElement>(null);
-  const [visible, setVisible] = useState(false);
-
-  useEffect(() => {
-    if (visible) return;
-
-    // Printing must not silently omit diagrams. Deferred rendering means
-    // anything below the fold has never been drawn, so a print started from the
-    // top of a long document would emit source text where the diagrams should
-    // be. `beforeprint` fires early enough to force them; Safari does not fire
-    // it reliably, hence the matchMedia listener as well.
-    const renderNow = () => setVisible(true);
-    const printQuery = window.matchMedia('print');
-
-    window.addEventListener('beforeprint', renderNow);
-    printQuery.addEventListener('change', (event) => {
-      if (event.matches) renderNow();
-    });
-
-    const element = container.current;
-    const observer = element
-      ? new IntersectionObserver(
-          (entries) => {
-            if (entries.some((entry) => entry.isIntersecting)) renderNow();
-          },
-          // Start a little before the diagram scrolls in, so it is usually
-          // ready by the time the reader reaches it.
-          { rootMargin: '400px' },
-        )
-      : null;
-
-    if (element && observer) observer.observe(element);
-
-    return () => {
-      window.removeEventListener('beforeprint', renderNow);
-      observer?.disconnect();
-    };
-  }, [visible]);
+  // Rendering is deferred until the diagram is near the viewport, and forced by
+  // printing — see use-near-viewport.ts, which code blocks share.
+  const { ref: container, near: visible } = useNearViewport<HTMLDivElement>();
 
   useEffect(() => {
     if (!visible) return;

@@ -29,22 +29,54 @@ import { CORPUS, REAL_DOCUMENT } from '../test/perf/corpus';
  * a fast laptop. Running with `PERF_STRICT=1` asserts §16 itself, which is the
  * form the release gate is signed off in, on a machine somebody chose.
  *
- * That split is deliberate and it is not a way of quietly passing: as of M4 the
- * strict run **fails** on the 50KB and 250KB rows. Rendering happens on the main
- * thread in one synchronous commit until M5 moves the pipeline into a worker and
- * memoizes blocks, and the numbers below are the before-picture that work is
- * measured against. Loosening §16 to match what we have would delete the only
- * record that we are not there yet.
+ * That split is not a way of quietly passing. Every §16 row is met on the
+ * machine the gate is signed off on, and the strict run is what proves it; the
+ * ceiling exists so that a busy runner cannot turn a met budget into a red
+ * build. If a strict run ever fails, that is the finding — §16 does not move to
+ * meet the code.
+ *
+ * **Long tasks are watched past first paint.** The slices still mounting, the
+ * diagrams hydrating and the code blocks upgrading all happen afterwards, and a
+ * measurement that stopped at the first frame would report a clean main thread
+ * while the reader's scrolling stuttered.
  */
 
-/** The document handed to the app before every measurement. Small on purpose. */
-const WARMUP = ['# Warm up', '', 'Text, `code`, and a fence:', '', '```ts', 'const x = 1;', '```', ''].join('\n');
+/**
+ * The document handed to the app before every measurement.
+ *
+ * Small, but it has to contain one of everything the corpus contains — a fence
+ * *and* a formula — or the first corpus document that uses one pays to download
+ * that chunk inside the measured window. That is how a 250KB render read 739ms
+ * one run and 460ms the next: KaTeX arriving mid-measurement.
+ */
+const WARMUP = [
+  '# Warm up',
+  '',
+  'Text, `code`, a fence and a formula.',
+  '',
+  '```ts',
+  'const x = 1;',
+  '```',
+  '',
+  '$$x^2$$',
+  '',
+].join('\n');
 
 interface Measurement {
   renderMs: number;
   longestTaskMs: number | null;
   heapMB: number | null;
 }
+
+/**
+ * How long to keep watching for long tasks after the document is on screen.
+ *
+ * First paint is not where the main thread is most at risk: the slices still
+ * mounting, the diagrams hydrating and the code blocks upgrading all land
+ * *after* it. A measurement that stopped at first paint would report a clean
+ * main thread and miss every one of them.
+ */
+const SETTLE_MS = 3000;
 
 /**
  * Opens a document by drop and times it to the pixel.
@@ -56,8 +88,8 @@ interface Measurement {
  * throttles its timers to about a second, which is why this lives in Playwright
  * and not in a devtools console.
  */
-async function measure(page: Page, text: string): Promise<Measurement> {
-  return page.evaluate(async (contents) => {
+async function measure(page: Page, text: string, settle = 0): Promise<Measurement> {
+  return page.evaluate(async ({ contents, settle }) => {
     // Longest main-thread task during the render. `longtask` is Chromium-only,
     // and its absence is reported as null rather than as a zero.
     let longestTaskMs: number | null = null;
@@ -97,6 +129,11 @@ async function measure(page: Page, text: string): Promise<Measurement> {
     });
 
     const renderMs = performance.now() - start;
+
+    // Keep listening while the rest of the document mounts, the diagrams
+    // hydrate and the code upgrades itself. Those are the tasks most likely to
+    // be long, and they all happen after the reader can see something.
+    await new Promise((resolve) => setTimeout(resolve, settle));
     observer?.disconnect();
 
     const memory = (performance as { memory?: { usedJSHeapSize: number } }).memory;
@@ -106,7 +143,7 @@ async function measure(page: Page, text: string): Promise<Measurement> {
       longestTaskMs,
       heapMB: memory ? memory.usedJSHeapSize / 1024 / 1024 : null,
     };
-  }, text);
+  }, { contents: text, settle });
 }
 
 /** Loads the app, then warms every lazily-imported chunk the corpus will need. */
@@ -135,9 +172,14 @@ function report(label: string, target: number, measurement: Measurement): void {
   const verdict = measurement.renderMs < target ? 'meets' : 'MISSES';
 
   const parts = [`${label}: ${rendered}ms render (${verdict} §16 target of ${target}ms)`];
-  if (measurement.longestTaskMs !== null) {
-    parts.push(`${Math.round(measurement.longestTaskMs)}ms longest task`);
-  }
+  // A `longtask` entry exists only for tasks over 50ms, so "none" is the
+  // §16 result rather than a missing reading. Said in words, because a silent
+  // line and a clean one look identical otherwise.
+  parts.push(
+    measurement.longestTaskMs === null
+      ? 'no task over 50ms'
+      : `${Math.round(measurement.longestTaskMs)}ms longest task`,
+  );
   if (measurement.heapMB !== null) parts.push(`${Math.round(measurement.heapMB)}MB heap`);
   console.log(parts.join(', '));
 }
@@ -153,9 +195,7 @@ function report(label: string, target: number, measurement: Measurement): void {
 const BUDGETS = {
   readme: { target: 150, ceiling: 900 },
   medium: { target: 600, ceiling: 2000 },
-  // §16 asks for 2.5s on 1MB. M4 renders on the main thread and mounts every
-  // diagram at once, so the honest default ceiling is "did not hang".
-  torture: { target: 2500, ceiling: 30_000 },
+  torture: { target: 2500, ceiling: 8000 },
 };
 
 function limit(budget: { target: number; ceiling: number }): number {
@@ -167,7 +207,7 @@ test.describe('§16 render budgets', () => {
     const document = await readFile(REAL_DOCUMENT, 'utf8');
     await warmed(page);
 
-    const measurement = await measure(page, document);
+    const measurement = await measure(page, document, SETTLE_MS);
     report('45KB real document', BUDGETS.readme.target, measurement);
 
     expect(measurement.renderMs).toBeLessThan(limit(BUDGETS.readme));
@@ -176,23 +216,35 @@ test.describe('§16 render budgets', () => {
   test('a 250KB document renders within the full-render budget', async ({ page }) => {
     await warmed(page);
 
-    const measurement = await measure(page, CORPUS.medium());
+    const measurement = await measure(page, CORPUS.medium(), SETTLE_MS);
     report('250KB corpus document', BUDGETS.medium.target, measurement);
 
     expect(measurement.renderMs).toBeLessThan(limit(BUDGETS.medium));
   });
 
-  test('a 1MB torture document renders and stays inside the memory budget', async ({ page }) => {
+  test('a 1MB torture document renders without blocking the main thread', async ({ page }) => {
     test.slow();
     await warmed(page);
 
-    const measurement = await measure(page, CORPUS.torture());
+    const measurement = await measure(page, CORPUS.torture(), SETTLE_MS);
     report('1MB torture document', BUDGETS.torture.target, measurement);
 
     expect(measurement.renderMs).toBeLessThan(limit(BUDGETS.torture));
-    // §16's 250MB, and it does not wait for M5: a memory number this far inside
-    // its budget is the thing that says the document is *held* cheaply even
-    // while it is *rendered* expensively.
+
+    // §16's other rule for this row, and the one that decided the
+    // architecture: no task over 50ms. Asserted at every level rather than
+    // only under PERF_STRICT, because it is not a stopwatch reading that a
+    // loaded machine can push over the line — a task this long means work went
+    // back onto the main thread, which is a structural regression whatever
+    // hardware notices it. The ceiling is doubled off strict for the one thing
+    // a loaded machine genuinely does inflate: the length of a task already
+    // running when the scheduler is preempted.
+    if (measurement.longestTaskMs !== null) {
+      expect(measurement.longestTaskMs).toBeLessThan(STRICT ? 50 : 100);
+    }
+
+    // §16's 250MB. A number this far inside its budget is what says the
+    // document is held cheaply as well as rendered cheaply.
     if (measurement.heapMB !== null) expect(measurement.heapMB).toBeLessThan(250);
   });
 });

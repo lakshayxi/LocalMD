@@ -1,5 +1,6 @@
-import { Document } from '@/render';
+import { Document, HighlightProvider } from '@/render';
 import { EditorSurface } from '../editor-loader';
+import { highlightCode } from '../pipeline-loader';
 import { useDocument } from '../store';
 import { Outline } from './Outline';
 import { RemoteContentNotice } from './RemoteContentNotice';
@@ -18,7 +19,7 @@ import { RemoteContentNotice } from './RemoteContentNotice';
  * version worth having. Shipping the lying one first would be harder to remove
  * than to never add.
  */
-export function Workspace() {
+export function Workspace({ onRendered }: { onRendered: () => void }) {
   const mode = useDocument((s) => s.mode);
   const rendered = useDocument((s) => s.rendered);
   const source = useDocument((s) => s.source);
@@ -46,7 +47,12 @@ export function Workspace() {
   const preview = (
     <>
       <RemoteContentNotice />
-      <Document tree={rendered.tree} />
+      {/* The renderer decides *when* a block is worth highlighting; who does
+          the work is supplied here, because it runs in the worker and
+          src/render may not reach into src/platform. */}
+      <HighlightProvider highlight={highlightCode}>
+        <Document slices={rendered.slices} onComplete={onRendered} />
+      </HighlightProvider>
     </>
   );
 

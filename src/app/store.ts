@@ -1,5 +1,4 @@
 import { create } from 'zustand';
-import type { RenderResult } from '@/core/markdown';
 import type { TextShape } from '@/core/text/encoding';
 import type { DocumentContents, DocumentSource, SaveOutcome } from '@/platform/files';
 import { FileHandleSource, MemorySource } from '@/platform/files';
@@ -17,6 +16,7 @@ import {
 } from '@/platform/persistence';
 // Type-only imports above are erased at build time; the pipeline itself is
 // loaded on demand so it stays out of the entry chunk. See pipeline-loader.ts.
+import type { RenderedDocument } from '@/platform/render/client';
 import { renderMarkdown } from './pipeline-loader';
 
 export type Theme = 'system' | 'light' | 'dark';
@@ -90,7 +90,7 @@ interface DocumentState {
   text: string;
   /** Original encoding, carried so M4's save can restore it byte-for-byte. */
   shape: TextShape | null;
-  rendered: RenderResult | null;
+  rendered: RenderedDocument | null;
   status: Status;
   error: string | null;
 

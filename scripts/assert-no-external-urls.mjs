@@ -43,6 +43,13 @@ const ALLOWED = [
     why: 'A public DTD identifier in parse5\'s doctype table. An identifier, not a fetch target.',
   },
   {
+    prefix: 'https://html.spec.whatwg.org/multipage/parsing.html#parse-error-',
+    why:
+      "parse5 names each parse error after its section of the HTML spec. Interpolated into " +
+      'error text, never requested. Present since the render worker started using parse5 to ' +
+      'parse KaTeX output, which is what a DOM-free build of that path costs.',
+  },
+  {
     prefix: 'https://localmd.invalid',
     why:
       'Ours. Used as the base URL for parsing image hosts in core/markdown/plugins/images.ts. ' +

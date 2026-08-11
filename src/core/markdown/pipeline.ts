@@ -14,7 +14,6 @@ import { visit } from 'unist-util-visit';
 import { guardUrls } from './plugins/guard-urls';
 import { handleImages } from './plugins/images';
 import { hardenLinks } from './plugins/harden-links';
-import { highlight } from './plugins/highlight';
 import { math } from './plugins/math';
 import { extractMermaid } from './plugins/mermaid';
 import { convertTaskCheckboxes } from './plugins/task-lists';
@@ -111,11 +110,12 @@ export async function renderMarkdown(
       properties: { className: ['lmd-heading-anchor'] },
     })
     .use(collectHeadings, headings)
-    // Math, highlighting, and diagram extraction each load their dependency
-    // only if the document actually contains that construct — see the plugins.
+    // Math and diagram extraction each load their dependency only if the
+    // document actually contains that construct. Syntax highlighting is
+    // deliberately *not* here: it happens per block after first paint, in the
+    // render worker. See core/markdown/highlight.ts for why.
     .use(math)
     .use(extractMermaid)
-    .use(highlight)
     .use(handleImages, { allowRemote: options.allowRemoteContent === true, blocked })
     .use(hardenLinks);
 

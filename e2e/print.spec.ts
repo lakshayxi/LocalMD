@@ -128,6 +128,16 @@ test.describe('print', () => {
   });
 
   test('keeps code legible without background colour', async ({ page }) => {
+    // Highlighting is applied by the renderer after paint now, not baked into
+    // the tree by the pipeline, so the upgraded block has to be waited for.
+    // Worth knowing about the real print path: a block below the fold is
+    // upgraded when `beforeprint` fires, and the browser does not wait for the
+    // round trip — so a first print of a long document can put plain code on
+    // the page. The rule asserted here is why that is survivable: print forces
+    // every token to black anyway, and what is lost is bold and italic
+    // emphasis rather than legibility.
+    await page.locator('.lmd-document .shiki span').first().waitFor();
+
     // Printers drop backgrounds, and Shiki's mid-tone token colours turn to
     // muddy grey, so printed code is forced to black.
     const colour = await page.evaluate(() => {
