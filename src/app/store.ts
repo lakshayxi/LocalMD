@@ -282,15 +282,26 @@ function confirmDiscard(
  *    Re-requesting works here because Restore is a click, and a refusal is an
  *    answer — the draft comes back as a document that saves through the picker.
  *  - **The file is gone.** Moved or deleted. Same outcome: text kept, Save As.
- *  - **The file changed underneath the draft.** The text is still the reader's
- *    work and still worth having back, but saving it would now overwrite edits
- *    made somewhere else, so that is said plainly and left as their decision.
+ *  - **The file no longer matches what the draft branched from.** The text is
+ *    still the reader's work and still worth having back, but saving it would
+ *    now overwrite whatever else has happened to that file, so that is said
+ *    plainly and left as their decision.
  *
- * The third case is the narrow half of external-change detection: it compares
- * the same mtime that the full check will, but only at the moment of recovery,
- * where a stale draft makes a collision most likely. Guarding the *save* of an
- * already-open document whose file moved under it is the rest of that work, and
- * it is deliberately not duplicated here.
+ * That third case tests `!==`, not "newer". A mismatch in either direction means
+ * the file is not the version this draft came from, and an *older* mtime is not
+ * the benign case it looks like: a restore from backup, a `git checkout`, a sync
+ * client writing a stale copy, and a clock that stepped backwards all produce
+ * one, and all of them mean the bytes on disk are something the reader has not
+ * seen. Trusting an older timestamp would wave through exactly the collisions
+ * hardest to reason about afterwards.
+ *
+ * **This is the narrow half of external-change detection, and it is explicitly
+ * not enough to deploy on.** It compares the same mtime the full check will, but
+ * only at the moment of recovery, and it only *warns* — ⌘S afterwards still
+ * overwrites. Guarding the save of an already-open document whose file moved
+ * under it is M4's external-change item, and it must land before this reaches
+ * production. Until it does, a restored draft can still replace a file that
+ * changed while it was gone.
  */
 async function adoptDraft(
   draft: StoredDraft,
@@ -323,14 +334,19 @@ async function adoptDraft(
     };
   }
 
-  if (draft.baseModified !== null && meta.lastModified > draft.baseModified) {
+  if (draft.baseModified !== null && meta.lastModified !== draft.baseModified) {
     return {
       source,
       // An error notice, which is the one kind that does not dismiss itself.
       // This has to still be on screen when they reach for ⌘S.
+      //
+      // Worded without a direction, because the check has none: "no longer
+      // matches" is true whether the file moved forward or back, and claiming
+      // it changed *after* the draft would be a guess in the cases that matter
+      // most.
       notice: {
         kind: 'error',
-        message: `${draft.name} changed on disk after this draft was written. Saving will replace those changes.`,
+        message: `${draft.name} on disk no longer matches the version this draft came from. Saving will replace what is there now.`,
       },
     };
   }

@@ -203,4 +203,54 @@ describe('discardDraft', () => {
     const drafts = await freshModule();
     await expect(drafts.discardDraft('never-existed')).resolves.toBeUndefined();
   });
+
+  it('refuses a write that was in flight when the discard arrived', async () => {
+    // The race this closes: a flush suspends mid-write, ⌘S lands and deletes the
+    // draft, and the suspended write resumes to put it back — leaving the text
+    // of a *saved* document in the one store that promises never to hold it.
+    //
+    // Asserted on the return value rather than on the store, because the store
+    // ends up empty either way today: both calls await the same memoized
+    // `getDB`, so the `put` is always issued before the `delete` and IndexedDB
+    // commits them in that order. That safety is incidental — it rests on the
+    // memoization, on `idb` issuing its request synchronously, and on microtask
+    // registration order, and any one of those can change under a refactor with
+    // no visible symptom. What the guard adds is the refusal itself, so pin
+    // that: a write racing a discard must report that it kept nothing.
+    const drafts = await freshModule();
+
+    const id = await drafts.saveDraft(draft({ text: 'still being edited' }));
+    const inFlight = drafts.saveDraft(draft({ id, text: 'the flush that was already going' }));
+
+    await drafts.discardDraft(id!);
+
+    expect(await inFlight).toBeNull();
+    expect(await drafts.listDrafts()).toEqual([]);
+  });
+
+  it('ignores a flush that arrives after its draft was discarded', async () => {
+    const drafts = await freshModule();
+
+    const id = await drafts.saveDraft(draft({ text: 'first' }));
+    await drafts.discardDraft(id!);
+    await drafts.saveDraft(draft({ id, text: 'late' }));
+
+    expect(await drafts.listDrafts()).toEqual([]);
+  });
+
+  it('still keeps a net for work edited again after a save', async () => {
+    // The other half of retiring an id: it must not cost the reader the net for
+    // the *next* edit. The store mints a fresh id once a document goes dirty
+    // again, so a discarded id is never asked for twice.
+    const drafts = await freshModule();
+
+    const id = await drafts.saveDraft(draft({ text: 'saved and gone' }));
+    await drafts.discardDraft(id!);
+
+    await drafts.saveDraft(draft({ id: null, text: 'edited again afterwards' }));
+
+    expect((await drafts.listDrafts()).map((entry) => entry.text)).toEqual([
+      'edited again afterwards',
+    ]);
+  });
 });

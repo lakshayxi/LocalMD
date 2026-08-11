@@ -32,6 +32,31 @@ const MAX_DRAFTS = 8;
  */
 const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
+/**
+ * Rows that must never be written again.
+ *
+ * Cancelling a scheduled flush stops a write that has not started. It does
+ * nothing about one already in the air — and there is always one in the air at
+ * exactly the wrong moment, because the flush that matters is the one racing a
+ * save. The sequence that costs the reader their guarantee:
+ *
+ *   1. the idle timer fires and `saveDraft` suspends on `getDB()`
+ *   2. ⌘S lands, the file is written, `discardDraft` deletes the row
+ *   3. the suspended write resumes and puts the row back
+ *
+ * The store now holds the text of a saved document, which is the one thing
+ * db.ts promises it never does. An id is retired the instant its work becomes
+ * durable or is thrown away, and a retired id is refused — before the write and
+ * again after every await it passes through, since the discard can arrive in
+ * any of those gaps.
+ *
+ * Retired forever rather than on a timer: ids are per-document UUIDs and the
+ * store mints a fresh one the moment a document is edited again, so nothing
+ * legitimate ever asks to write a retired id twice. The set grows by one entry
+ * per document edited in a session, which is not a size worth managing.
+ */
+const retired = new Set<string>();
+
 export interface DraftInput {
   /**
    * The row this document owns.
@@ -61,8 +86,15 @@ export interface DraftInput {
  */
 export async function saveDraft(input: DraftInput): Promise<string | null> {
   try {
-    const db = await getDB();
     const id = input.id ?? crypto.randomUUID();
+    if (retired.has(id)) return null;
+
+    const db = await getDB();
+    // Checked again on the far side of the await. Opening the database is the
+    // long suspension in this function and therefore the likely place for a
+    // discard to arrive; below this line the `put` is issued synchronously, so
+    // there is no further gap for one to slip into.
+    if (retired.has(id)) return null;
 
     await db.put('drafts', {
       id,
@@ -132,6 +164,12 @@ export async function listDrafts(): Promise<StoredDraft[]> {
  * is precisely what this store promises not to do.
  */
 export async function discardDraft(id: string): Promise<void> {
+  // Before the await, and outside the try. Retiring the id is what actually
+  // makes the delete stick, so it must happen even if the database is
+  // unreachable — and it must happen synchronously, so that a flush suspended
+  // right now sees it when it resumes rather than winning the race by a tick.
+  retired.add(id);
+
   try {
     const db = await getDB();
     await db.delete('drafts', id);
