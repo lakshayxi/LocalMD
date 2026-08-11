@@ -3,6 +3,7 @@ import { createEmptyDocument, createPastedDocument, openFile } from '@/platform/
 import { MOD_KEY } from '../format';
 import { FEEDBACK_URL, REPO_URL } from '../links';
 import { useDocument } from '../store';
+import { DraftRecovery } from './DraftRecovery';
 import { Recents } from './Recents';
 
 /**
@@ -43,6 +44,11 @@ export function Landing({ onOpenPrivacy }: { onOpenPrivacy: () => void }) {
             {error}
           </p>
         )}
+
+        {/* Above the actions, which is the one thing on this screen it should
+            outrank: work the reader has already done and not saved matters more
+            than the file they came here to open. */}
+        <DraftRecovery />
 
         {pasting ? (
           <div className="lmd-paste">

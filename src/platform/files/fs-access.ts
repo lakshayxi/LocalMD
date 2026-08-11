@@ -33,6 +33,7 @@ export class FileHandleSource implements DocumentSource {
   readonly canSaveInPlace = true;
 
   private cachedSize: number | null = null;
+  private cachedModified: number | null = null;
 
   constructor(
     readonly handle: FileSystemFileHandle,
@@ -49,9 +50,22 @@ export class FileHandleSource implements DocumentSource {
     return this.cachedSize;
   }
 
+  /**
+   * The file's mtime as of the last read or write, or null before either.
+   *
+   * This is the version of the file everything in the session is working from,
+   * so it is what a draft records and what external-change detection compares
+   * against. Cached rather than fetched, because the callers that need it are on
+   * teardown paths where there is no time left to stat a file.
+   */
+  get lastModified(): number | null {
+    return this.cachedModified;
+  }
+
   async read(): Promise<DocumentContents> {
     const file = await this.handle.getFile();
     this.cachedSize = file.size;
+    this.cachedModified = file.lastModified;
     return decodeText(await file.text());
   }
 
@@ -67,8 +81,15 @@ export class FileHandleSource implements DocumentSource {
     if (!(await ensureWritePermission(this.handle))) return { kind: 'cancelled' };
 
     await writeToHandle(this.handle, encodeText(contents.text, contents.shape));
-    // Size changed underneath us; recents shows it.
-    this.cachedSize = null;
+
+    // The file on disk is now a version we have never stat'd. Re-reading its
+    // metadata is what keeps `size` right in recents, and what moves the
+    // baseline a later draft branches from onto the copy we just wrote rather
+    // than leaving it on the one we opened.
+    const meta = await this.getFileMeta();
+    this.cachedSize = meta?.size ?? null;
+    this.cachedModified = meta?.lastModified ?? null;
+
     return { kind: 'saved', source: this };
   }
 

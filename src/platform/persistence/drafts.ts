@@ -48,6 +48,8 @@ export interface DraftInput {
   shape: TextShape;
   /** Null for pasted, new, and dropped documents — there is no file behind them. */
   handle: FileSystemFileHandle | null;
+  /** The file's mtime when it was last read or written. See StoredDraft. */
+  baseModified: number | null;
 }
 
 /**
@@ -69,6 +71,7 @@ export async function saveDraft(input: DraftInput): Promise<string | null> {
       shape: input.shape,
       savedAt: Date.now(),
       handle: input.handle,
+      baseModified: input.baseModified,
     });
 
     await supersede(db, id, input.handle);

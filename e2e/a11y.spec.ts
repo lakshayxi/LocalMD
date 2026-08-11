@@ -69,6 +69,59 @@ test('the landing page is clean', async ({ page }) => {
   await expectClean(page);
 });
 
+/**
+ * Puts a draft in storage without going through an edit.
+ *
+ * Reaching this state through the UI costs an open, an edit, a wait for the idle
+ * flush and a reload; seeding it directly is the same panel in a tenth of the
+ * time. The behaviour behind it is proved in recovery.spec.ts — what is being
+ * scanned here is the markup and the colours.
+ */
+async function seedDraft(page: Page) {
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve, reject) => {
+        const request = indexedDB.open('localmd');
+        request.onerror = () => reject(new Error('no storage'));
+        request.onsuccess = () => {
+          const transaction = request.result.transaction('drafts', 'readwrite');
+          transaction.objectStore('drafts').put({
+            id: 'seeded',
+            name: 'notes.md',
+            text: '# Notes\n',
+            shape: { hadBom: false, lineEnding: 'lf', hadTrailingNewline: true },
+            savedAt: Date.now() - 60_000,
+            handle: null,
+            baseModified: null,
+          });
+          transaction.oncomplete = () => resolve();
+          transaction.onerror = () => reject(new Error('write failed'));
+        };
+      }),
+  );
+
+  await page.reload();
+}
+
+test('the draft recovery panel is clean', async ({ page }) => {
+  await seedDraft(page);
+  const recovery = page.getByRole('region', { name: 'Unsaved work' });
+  await expect(recovery).toBeVisible();
+
+  // The one surface in the app that puts small text on --bg-surface rather than
+  // on --bg. The two backgrounds differ by less than the eye reads as a change
+  // and by more than the contrast budget tolerates, so this is scanned in both
+  // themes rather than trusted to look fine.
+  for (const theme of ['light', 'dark'] as const) {
+    await page.evaluate((value) => {
+      document.documentElement.setAttribute('data-theme', value);
+    }, theme);
+
+    const { violations } = await scan(page);
+    expect(describe(violations), `axe violations in ${theme}`).toEqual([]);
+  }
+});
+
 test('the privacy page is clean', async ({ page }) => {
   await page.getByRole('button', { name: 'Privacy' }).click();
   await expect(page.getByRole('heading', { name: 'Privacy', level: 1 })).toBeVisible();

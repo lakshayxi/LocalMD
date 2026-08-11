@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { readDrafts } from './helpers/drafts';
 
 /**
  * The navigation guard: what happens to unsaved work when the page goes away.
@@ -57,31 +58,6 @@ async function hideTab(page: Page) {
     Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true });
     document.dispatchEvent(new Event('visibilitychange'));
   });
-}
-
-/** Reads the draft store directly. Empty when there is nothing, or nothing yet. */
-async function readDrafts(page: Page): Promise<{ name: string; text: string }[]> {
-  return page.evaluate(
-    () =>
-      new Promise<{ name: string; text: string }[]>((resolve) => {
-        const request = indexedDB.open('localmd');
-        request.onerror = () => resolve([]);
-        request.onsuccess = () => {
-          const db = request.result;
-          if (!db.objectStoreNames.contains('drafts')) return resolve([]);
-
-          const all = db.transaction('drafts', 'readonly').objectStore('drafts').getAll();
-          all.onerror = () => resolve([]);
-          all.onsuccess = () =>
-            resolve(
-              (all.result as { name: string; text: string }[]).map(({ name, text }) => ({
-                name,
-                text,
-              })),
-            );
-        };
-      }),
-  );
 }
 
 test.beforeEach(async ({ page }) => {

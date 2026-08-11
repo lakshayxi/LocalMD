@@ -20,10 +20,18 @@
   --fg-muted: #5f5f59;
   /* The AA floor, and the reason it is not lighter. Every use of this token —
      the alpha chip, landing hints, recents timestamps, outline and palette
-     group labels — is small text on --bg or --bg-surface, so it needs 4.5:1.
-     This sits at 4.59:1 against --bg; anything lighter fails, and the axe pass
-     in e2e/a11y.spec.ts will say so. --fg-muted stays a clear step darker so
-     the three-level scale survives the constraint. */
+     group labels — is small text, so it needs 4.5:1.
+
+     Calibrated against --bg, where it sits at 4.59:1 (dark: 4.60:1). Anything
+     lighter fails, and the axe pass in e2e/a11y.spec.ts will say so.
+
+     **Against --bg-surface it does not clear the floor**: 4.27:1 light, 4.23:1
+     dark. Small text on a surface panel uses --fg-muted instead — see
+     .lmd-recovery. This was measured, not assumed, and the note is here because
+     the two backgrounds are close enough to look interchangeable and are not.
+
+     --fg-muted stays a clear step darker so the three-level scale survives the
+     constraint. */
   --fg-subtle: #74746c;
   --border: #e4e4de;
   --border-strong: #d2d2ca;

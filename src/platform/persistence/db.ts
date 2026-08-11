@@ -74,6 +74,16 @@ export interface StoredDraft {
    * nothing else about a document survives a reload.
    */
   handle: FileSystemFileHandle | null;
+  /**
+   * The file's modification time when LocalMD last read it or wrote to it.
+   *
+   * A draft is offered back hours or days later, and in between the file it
+   * came from may have been edited by something else. Recording where the draft
+   * branched from is what lets recovery tell the difference between putting
+   * work back and silently overwriting someone's other edits. Null whenever
+   * there was no file to stat.
+   */
+  baseModified: number | null;
 }
 
 interface LocalMDSchema extends DBSchema {

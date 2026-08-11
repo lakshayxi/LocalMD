@@ -226,7 +226,15 @@ body {
 .lmd-button.is-primary {
   border-color: var(--accent);
   background: var(--accent);
-  color: #fff;
+  /* --bg, not #fff. The accent inverts between themes — a dark blue on light,
+     a light blue on dark — so a fixed white label rides it down: 6.38:1 in
+     light, 2.38:1 in dark, a plain AA failure on the first button of the first
+     screen. The page background is the one colour guaranteed to sit opposite
+     the accent in both, and it lands at 6.21:1 and 7.46:1.
+
+     It went unnoticed because no axe pass rendered the landing page in dark
+     mode until the draft recovery panel needed one. */
+  color: var(--bg);
 }
 
 .lmd-button.is-primary:hover {
@@ -395,6 +403,83 @@ body {
   overflow: hidden;
   clip-path: inset(50%);
   white-space: nowrap;
+}
+
+/* ---------- Draft recovery ---------- */
+
+.lmd-recovery {
+  margin: 0 0 2rem;
+  padding: 0.85rem 0.9rem 0.75rem;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--bg-surface);
+  text-align: left;
+}
+
+/* --fg-muted throughout this panel, not the --fg-subtle its siblings use.
+   Subtle is calibrated against --bg, where it clears AA at 4.59:1; on this
+   panel's --bg-surface the same colour is 4.27:1, which small text fails. */
+.lmd-recovery-heading {
+  margin: 0 0 0.5rem;
+  color: var(--fg-muted);
+  font-size: 0.7rem;
+  font-weight: 550;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.lmd-recovery-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.lmd-recovery-item {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.35rem 0;
+}
+
+.lmd-recovery-item + .lmd-recovery-item {
+  border-top: 1px solid var(--border);
+}
+
+.lmd-recovery-label {
+  flex: 1;
+  min-width: 0;
+}
+
+.lmd-recovery-name {
+  display: block;
+  overflow: hidden;
+  color: var(--fg);
+  font-size: 0.8125rem;
+  font-weight: 550;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lmd-recovery-meta {
+  display: block;
+  color: var(--fg-muted);
+  font-size: 0.75rem;
+}
+
+.lmd-recovery-actions {
+  display: flex;
+  flex: none;
+  gap: 0.35rem;
+  /* Chips inherit the page's font size, which is half a step larger than the
+     rows they sit beside and made them look like the point of the panel. */
+  font-size: 0.8125rem;
+}
+
+.lmd-recovery-note {
+  margin: 0.65rem 0 0;
+  color: var(--fg-muted);
+  font-size: 0.7rem;
+  line-height: 1.55;
 }
 
 /* ---------- Recents ---------- */

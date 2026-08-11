@@ -38,6 +38,7 @@ function draft(overrides: Partial<DraftInput> = {}): DraftInput {
     text: '# Notes\n',
     shape: SHAPE,
     handle: null,
+    baseModified: null,
     ...overrides,
   };
 }
@@ -71,6 +72,7 @@ describe('saveDraft', () => {
     // store that holds document content, so anything added to it should have to
     // be said out loud.
     expect(Object.keys(stored!).sort()).toEqual([
+      'baseModified',
       'handle',
       'id',
       'name',
@@ -78,6 +80,17 @@ describe('saveDraft', () => {
       'shape',
       'text',
     ]);
+  });
+
+  it('records where the draft branched from, so recovery can spot a changed file', async () => {
+    const drafts = await freshModule();
+    const baseModified = Date.UTC(2026, 7, 11, 9, 30);
+
+    await drafts.saveDraft(draft({ baseModified }));
+
+    // Without this the recovery prompt cannot tell putting work back from
+    // overwriting whatever edited the file in the meantime.
+    expect((await drafts.listDrafts())[0]?.baseModified).toBe(baseModified);
   });
 
   it('overwrites the same row when handed back its id', async () => {

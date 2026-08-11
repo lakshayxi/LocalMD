@@ -149,20 +149,27 @@ export function PrivacyPage({ onClose }: { onClose: () => void }) {
           , not even a preview line.
         </p>
         <p className="lmd-callout">
-          Drafts are the exception, and they do hold your text. If you edit a document and leave the
-          tab — closing it, reloading, or switching away — LocalMD writes the unsaved version into
-          your browser&rsquo;s storage so a lost tab does not cost you the edit. It is written{' '}
+          Drafts are the exception, and they do hold your text. While a document has unsaved
+          changes, LocalMD writes the current version into your browser&rsquo;s storage a couple of
+          seconds after you stop typing, and again when you leave the tab — so a crash, a closed
+          tab, or a reload does not cost you the edit. It is written{' '}
           <strong>only while there are unsaved changes</strong>, and it is deleted as soon as the
           work is safe somewhere else: the moment you save or download, and the moment you close the
           document and confirm you are discarding it. A document you only read is never written
           anywhere. At most eight drafts are kept, and none for longer than seven days.
         </p>
         <p>
-          Nothing in a draft is ever sent anywhere; the policy above applies to it exactly as it
-          does to everything else. But it does mean text you have not saved can sit in browser
-          storage until you save it, discard it, or clear it below. In this build the draft is
-          written but not yet offered back to you — restoring one arrives in the next update, and
-          when it does it will ask rather than replace what you have open.
+          Nothing in a draft is ever sent anywhere; the policy above applies to it exactly as it does
+          to everything else. But it does mean that text you have not saved sits in browser storage
+          for as long as it stays unsaved — from a few seconds after you type it until you save,
+          discard, or clear it below.
+        </p>
+        <p>
+          When you come back, any drafts are listed on the opening screen with the time they were
+          written, and you choose <strong>Restore</strong> or <strong>Discard</strong> for each one.
+          Nothing is ever restored on its own. Restoring puts the text back in the editor, still
+          unsaved — it does not write to your file, and only saving ever does. If the file changed on
+          disk after the draft was written, LocalMD tells you before you can save over it.
         </p>
         <p>
           Anything with access to your browser profile can read all of it. LocalMD does not add

@@ -2,12 +2,13 @@ import { create } from 'zustand';
 import type { RenderResult } from '@/core/markdown';
 import type { TextShape } from '@/core/text/encoding';
 import type { DocumentContents, DocumentSource, SaveOutcome } from '@/platform/files';
-import { FileHandleSource } from '@/platform/files';
-import type { RecentDocument, StoredPrefs } from '@/platform/persistence';
+import { FileHandleSource, MemorySource } from '@/platform/files';
+import type { RecentDocument, StoredDraft, StoredPrefs } from '@/platform/persistence';
 import {
   discardDraft,
   ensureReadPermission,
   forgetRecent,
+  listDrafts,
   listRecents,
   loadPrefs,
   recordRecent,
@@ -38,6 +39,38 @@ export type Mode = 'view' | 'edit' | 'split';
  * debounce — not the render — is what the reader perceives.
  */
 const PREVIEW_DEBOUNCE_MS = 120;
+
+/**
+ * How long typing has to stop before unsaved work is written to the draft store.
+ *
+ * The navigation guard covers every teardown the page is told about — reload,
+ * tab close, app switch. It cannot cover the ones it is not told about: a
+ * browser crash, an OS kill, a lost battery. Those are exactly the cases where
+ * the reader has no chance to save first, so a draft that only exists on the way
+ * out is a net with a hole in the middle of it.
+ *
+ * This is a real change to what sits in browser storage, and it is stated on the
+ * privacy page rather than absorbed quietly: before, text was written when you
+ * left; now it is written a couple of seconds after you stop typing. The bargain
+ * that justifies the store is unchanged — written only while dirty, deleted the
+ * instant the work is durable — but the window during which unsaved text is at
+ * rest is now the whole editing session rather than the moment of departure.
+ *
+ * Two seconds, because it wants to be past the end of a sentence rather than in
+ * the middle of a word, and because a write nobody is waiting on costs nothing
+ * worth optimizing.
+ */
+const DRAFT_IDLE_MS = 2000;
+
+/**
+ * The ceiling on that debounce.
+ *
+ * A pure idle timer never fires for someone who does not pause, and the person
+ * typing without pause for a minute is precisely the person with the most to
+ * lose. This bounds what a crash can cost to the last fifteen seconds of work,
+ * whatever their typing rhythm.
+ */
+const DRAFT_MAX_WAIT_MS = 15_000;
 
 /**
  * Reading typeface.
@@ -92,9 +125,19 @@ interface DocumentState {
   /** Only documents with a reopenable handle appear here. See persistence/recents.ts. */
   recents: RecentDocument[];
 
+  /**
+   * Unsaved work left behind by an earlier session, offered on the landing
+   * screen. Loaded once on hydrate and refreshed whenever a row is spent, so the
+   * list the reader is looking at is never one that has already been acted on.
+   */
+  drafts: StoredDraft[];
+
   open: (source: DocumentSource) => Promise<void>;
   openRecent: (recent: RecentDocument) => Promise<void>;
   forget: (id: string) => Promise<void>;
+  restoreDraft: (draft: StoredDraft) => Promise<void>;
+  dismissDraft: (id: string) => Promise<void>;
+  refreshDrafts: () => Promise<void>;
   setMode: (mode: Mode) => Promise<void>;
   updateText: (text: string) => void;
   flushDraft: () => void;
@@ -140,6 +183,38 @@ function cancelPreview(): void {
 }
 
 /**
+ * The idle draft flush, and the deadline that keeps it from being starved.
+ *
+ * Module-scoped for the same reason the preview timer is: a timer id is
+ * scheduling machinery, not state, and putting one in the store would notify
+ * every subscriber on each keystroke.
+ */
+let draftTimer: ReturnType<typeof setTimeout> | undefined;
+let draftDeadline = 0;
+
+function scheduleDraftFlush(get: () => DocumentState): void {
+  const now = Date.now();
+  // The first keystroke of a burst starts the clock. Later ones push the idle
+  // timer back but must not push this, or continuous typing would defer the
+  // write forever — which is the case the ceiling exists for.
+  if (draftTimer === undefined) draftDeadline = now + DRAFT_MAX_WAIT_MS;
+
+  clearTimeout(draftTimer);
+  draftTimer = setTimeout(
+    () => {
+      draftTimer = undefined;
+      get().flushDraft();
+    },
+    Math.max(0, Math.min(DRAFT_IDLE_MS, draftDeadline - now)),
+  );
+}
+
+function cancelDraftFlush(): void {
+  clearTimeout(draftTimer);
+  draftTimer = undefined;
+}
+
+/**
  * Drops this document's draft, because its work is no longer unsaved.
  *
  * Clearing `draftId` first is what makes it safe to call from anywhere: the
@@ -150,6 +225,11 @@ function forgetDraft(
   set: (partial: Partial<DocumentState>) => void,
   get: () => DocumentState,
 ): void {
+  // Unconditionally, and before anything else. A flush left scheduled by the
+  // last few keystrokes would otherwise land after the delete and put the text
+  // of a now-saved document straight back into storage.
+  cancelDraftFlush();
+
   const { draftId } = get();
   if (!draftId) return;
 
@@ -185,6 +265,77 @@ function confirmDiscard(
 
   forgetDraft(set, get);
   return true;
+}
+
+/**
+ * Works out where a recovered draft's text should be able to go.
+ *
+ * Restoring puts unsaved work back in front of the reader. It never writes to a
+ * file — only saving does that — so the question here is narrower than it looks:
+ * whether ⌘S should still be able to write in place afterwards, and what the
+ * reader needs told before it does.
+ *
+ * Three things can have changed since the draft was written, and each has an
+ * answer that keeps the text and gives up only the shortcut:
+ *
+ *  - **The permission lapsed.** Handles survive a reload; their grant does not.
+ *    Re-requesting works here because Restore is a click, and a refusal is an
+ *    answer — the draft comes back as a document that saves through the picker.
+ *  - **The file is gone.** Moved or deleted. Same outcome: text kept, Save As.
+ *  - **The file changed underneath the draft.** The text is still the reader's
+ *    work and still worth having back, but saving it would now overwrite edits
+ *    made somewhere else, so that is said plainly and left as their decision.
+ *
+ * The third case is the narrow half of external-change detection: it compares
+ * the same mtime that the full check will, but only at the moment of recovery,
+ * where a stale draft makes a collision most likely. Guarding the *save* of an
+ * already-open document whose file moved under it is the rest of that work, and
+ * it is deliberately not duplicated here.
+ */
+async function adoptDraft(
+  draft: StoredDraft,
+): Promise<{ source: DocumentSource; notice: Notice | null }> {
+  // Same name, so it saves as the file it came from rather than as "Untitled".
+  const detached = () => new MemorySource(draft.name, draft.text);
+
+  if (!draft.handle) return { source: detached(), notice: null };
+
+  if ((await ensureReadPermission(draft.handle)) !== 'granted') {
+    return {
+      source: detached(),
+      notice: {
+        kind: 'info',
+        message: `Restored. LocalMD no longer has access to ${draft.name}, so saving will ask where to put it.`,
+      },
+    };
+  }
+
+  const source = new FileHandleSource(draft.handle);
+  const meta = await source.getFileMeta();
+
+  if (!meta) {
+    return {
+      source: detached(),
+      notice: {
+        kind: 'info',
+        message: `Restored, but ${draft.name} could not be found. Saving will ask where to put it.`,
+      },
+    };
+  }
+
+  if (draft.baseModified !== null && meta.lastModified > draft.baseModified) {
+    return {
+      source,
+      // An error notice, which is the one kind that does not dismiss itself.
+      // This has to still be on screen when they reach for ⌘S.
+      notice: {
+        kind: 'error',
+        message: `${draft.name} changed on disk after this draft was written. Saving will replace those changes.`,
+      },
+    };
+  }
+
+  return { source, notice: null };
 }
 
 /**
@@ -282,17 +433,22 @@ export const useDocument = create<DocumentState>((set, get) => ({
   typeface: 'sans',
   outlinePinned: true,
   recents: [],
+  drafts: [],
 
   async hydrate() {
     // Prefs are synchronous and were already applied by public/theme-init.js
     // before first paint; this only syncs them into React state.
     const prefs = loadPrefs();
     set({ theme: prefs.theme, typeface: prefs.typeface, outlinePinned: prefs.outlinePinned });
-    await get().refreshRecents();
+    await Promise.all([get().refreshRecents(), get().refreshDrafts()]);
   },
 
   async refreshRecents() {
     set({ recents: await listRecents() });
+  },
+
+  async refreshDrafts() {
+    set({ drafts: await listDrafts() });
   },
 
   async open(source) {
@@ -372,6 +528,60 @@ export const useDocument = create<DocumentState>((set, get) => ({
   },
 
   /**
+   * Puts unsaved work from an earlier session back in front of the reader.
+   *
+   * Not `open`, and deliberately not built on it: `open` reads a source and
+   * makes what it finds the document. Here the *draft* is the document, and the
+   * file — if there still is one — is only where it might go next. Routing this
+   * through `open` would read the file and overwrite the recovered text with
+   * exactly the version the reader was trying to get back from.
+   *
+   * The document arrives dirty, because it is. Nothing has been written
+   * anywhere, and the guard that has been protecting this text all along has to
+   * keep protecting it.
+   */
+  async restoreDraft(draft) {
+    // Restoring over a document that is itself mid-edit loses the same work a
+    // close would, and has to ask the same question.
+    if (!confirmDiscard(set, get)) return;
+
+    set({ status: 'loading', error: null, draftId: null });
+
+    const { source, notice } = await adoptDraft(draft);
+    const rendered = await renderMarkdown(draft.text, { allowRemoteContent: false });
+
+    set({
+      source,
+      text: draft.text,
+      // The shape travelled with the draft, so a document recovered from a
+      // crash still saves with the line endings and BOM the file arrived with.
+      shape: draft.shape,
+      rendered,
+      status: 'ready',
+      allowRemoteContent: false,
+      // Edit, where `open` uses View. A document being opened is something to
+      // read; a draft being restored is work that was interrupted, and putting
+      // the reader back where they were beats making them press ⌘E first.
+      mode: 'edit',
+      dirty: true,
+      // Adopting the row rather than minting a new one is what keeps this to a
+      // single draft — the next flush overwrites what was just recovered
+      // instead of filing a second copy of it alongside.
+      draftId: draft.id,
+      notice,
+    });
+
+    // The row stays: the work is still unsaved, so the net still applies. What
+    // has to go is this document's entry in the *offer*, which is now open.
+    set({ drafts: get().drafts.filter((entry) => entry.id !== draft.id) });
+  },
+
+  async dismissDraft(id) {
+    await discardDraft(id);
+    await get().refreshDrafts();
+  },
+
+  /**
    * Records an edit.
    *
    * In View and Edit this deliberately does *not* re-render the preview.
@@ -382,6 +592,9 @@ export const useDocument = create<DocumentState>((set, get) => ({
    */
   updateText(text) {
     set({ text, dirty: true });
+    // The crash net. The navigation guard covers every way of leaving the page
+    // that the page is told about; this covers the ways it is not.
+    scheduleDraftFlush(get);
     if (get().mode === 'split') schedulePreview(get);
   },
 
@@ -400,6 +613,10 @@ export const useDocument = create<DocumentState>((set, get) => ({
    * a reader who only ever read.
    */
   flushDraft() {
+    // Whatever the idle timer was about to write, this is writing now. Leaving
+    // it armed would cost a second identical write on the way out of a teardown.
+    cancelDraftFlush();
+
     const { source, text, shape, dirty, status, draftId } = get();
     if (!source || !shape || !dirty || status !== 'ready') return;
 
@@ -419,6 +636,10 @@ export const useDocument = create<DocumentState>((set, get) => ({
       // Only a handle survives a reload, so only a handle-backed document can be
       // recognised as "the same file" on the way back in.
       handle: source instanceof FileHandleSource ? source.handle : null,
+      // Cached on the source at read and write time rather than stat'd here:
+      // this runs on a teardown path, where there is no time left to await a
+      // file. See FileHandleSource.lastModified.
+      baseModified: source instanceof FileHandleSource ? source.lastModified : null,
     });
   },
 
@@ -501,6 +722,11 @@ export const useDocument = create<DocumentState>((set, get) => ({
       draftId: null,
       notice: null,
     });
+
+    // Closing lands on the screen that offers drafts back, so the list behind it
+    // has to be current — a row this close just discarded must not still be sat
+    // there waiting to be restored.
+    void get().refreshDrafts();
   },
 
   async setAllowRemoteContent(allow) {
