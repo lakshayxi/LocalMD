@@ -143,6 +143,14 @@ edit and a save on every path.
 
 ## Next operational improvement
 
-Deployment is still manual (`npx wrangler pages deploy dist`). Automating
-tag → build → deploy → verify is the first operational task after v0.1.0, and
-was deliberately not bundled into this release.
+Deployment for v0.1.0 was manual (`npx wrangler pages deploy dist`), and
+automating it was deliberately not bundled into the release.
+
+**Done on 2026-08-12, after the tag.** `.github/workflows/release.yml` now runs
+on `release: published`: build and check → e2e on all three engines → deploy the
+checked `dist/` to Cloudflare Pages → run `scripts/verify-production.mjs`
+against the live origin. The deploy is gated on the tests rather than sequenced
+after them, and it ships the artifact the gate job built rather than a rebuild.
+It needs two repository secrets, `CLOUDFLARE_API_TOKEN` and
+`CLOUDFLARE_ACCOUNT_ID`; without them the job fails at a preflight step with a
+named message rather than a wrangler auth error.
