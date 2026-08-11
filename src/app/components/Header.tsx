@@ -1,5 +1,6 @@
 import { FEEDBACK_URL, REPO_URL } from '../links';
 import { useDocument } from '../store';
+import { ModeToggle } from './ModeToggle';
 import { ThemeToggle } from './ThemeToggle';
 import { TypefaceToggle } from './TypefaceToggle';
 
@@ -61,6 +62,7 @@ export function Header({ onOpenPrivacy }: { onOpenPrivacy: () => void }) {
       </div>
 
       <div className="lmd-header-right">
+        {source && <ModeToggle />}
         {source && (
           <span
             className={`lmd-privacy ${blockedCount > 0 && !allowRemote ? 'is-blocking' : ''}`}

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Document } from '@/render';
 import { createPastedDocument, openFile } from '@/platform/files';
 import { DropTarget } from './components/DropTarget';
+import { EditorSurface } from './editor-loader';
 import { Header } from './components/Header';
 import { Landing } from './components/Landing';
 import { Outline } from './components/Outline';
@@ -18,6 +19,14 @@ export function App() {
   const rendered = useDocument((s) => s.rendered);
   const open = useDocument((s) => s.open);
   const hydrate = useDocument((s) => s.hydrate);
+  const mode = useDocument((s) => s.mode);
+  const setMode = useDocument((s) => s.setMode);
+  const source = useDocument((s) => s.source);
+  const updateText = useDocument((s) => s.updateText);
+  // Read once per mode switch, not subscribed: the editor takes this as its
+  // starting document, and re-rendering App on every keystroke to keep a prop
+  // in sync is exactly the cost the editor exists to avoid.
+  const text = useDocument.getState().text;
   const [route, navigate] = useRoute();
   const [paletteOpen, setPaletteOpen] = useState(false);
 
@@ -35,6 +44,9 @@ export function App() {
       void openFile().then((source) => source && open(source));
     }, [open]),
     onPaste: useCallback((text: string) => void open(createPastedDocument(text)), [open]),
+    onToggleMode: useCallback(() => {
+      void setMode(useDocument.getState().mode === 'edit' ? 'view' : 'edit');
+    }, [setMode]),
   });
 
   // Moving between screens should start at the top, the way following a link
@@ -81,11 +93,23 @@ export function App() {
     <DropTarget>
       <Header onOpenPrivacy={() => navigate('privacy')} />
       {status === 'ready' && rendered ? (
-        <>
-          <RemoteContentNotice />
-          <Outline />
-          <Document tree={rendered.tree} />
-        </>
+        mode === 'edit' ? (
+          <EditorSurface
+            doc={text}
+            // Keyed to the document, so switching modes on the same file keeps
+            // the editor's history and cursor rather than rebuilding it.
+            docId={source?.id ?? 'untitled'}
+            onChange={updateText}
+            ariaLabel={`Markdown source of ${source?.name ?? 'the document'}`}
+            autoFocus
+          />
+        ) : (
+          <>
+            <RemoteContentNotice />
+            <Outline />
+            <Document tree={rendered.tree} />
+          </>
+        )
       ) : (
         <Landing onOpenPrivacy={() => navigate('privacy')} />
       )}

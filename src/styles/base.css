@@ -296,6 +296,41 @@ body {
   font-size: 0.875rem;
 }
 
+/* ---------- Editor ---------- */
+
+.lmd-editor {
+  min-height: calc(100dvh - var(--header-height));
+}
+
+/* The Suspense fallback while the CodeMirror chunk arrives. Reserves the space
+   so the header does not jump, and shows nothing — the chunk resolves too
+   quickly for a spinner to read as anything but a flicker. */
+.lmd-editor.is-loading {
+  min-height: calc(100dvh - var(--header-height));
+}
+
+.lmd-dirty {
+  display: inline-flex;
+  align-items: center;
+}
+
+.lmd-dirty-dot {
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 50%;
+  background: var(--warning);
+}
+
+/* Available to assistive technology, absent from the page. */
+.lmd-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 /* ---------- Recents ---------- */
 
 .lmd-recents {

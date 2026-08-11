@@ -53,6 +53,10 @@
 
   --radius: 5px;
   --header-height: 40px;
+
+  /* Monospace reads smaller than prose at the same nominal size, so the editor
+     is set slightly larger than --ui-size to land at the same optical weight. */
+  --editor-size: 0.9rem;
 }
 
 /* Reading typeface. Application chrome always uses the system stack — it should

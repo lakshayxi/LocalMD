@@ -22,10 +22,12 @@ export function useShortcuts({
   onPalette,
   onOpen,
   onPaste,
+  onToggleMode,
 }: {
   onPalette: () => void;
   onOpen: () => void;
   onPaste: (text: string) => void;
+  onToggleMode: () => void;
 }): void {
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -43,6 +45,14 @@ export function useShortcuts({
         return;
       }
 
+      // ⌘E also has to work from inside the editor — it is how you get *out* of
+      // Edit mode, and CodeMirror's content counts as a text field.
+      if (key === 'e') {
+        event.preventDefault();
+        onToggleMode();
+        return;
+      }
+
       if (isTyping(event.target)) return;
 
       if (key === 'o') {
@@ -53,7 +63,7 @@ export function useShortcuts({
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [onPalette, onOpen]);
+  }, [onPalette, onOpen, onToggleMode]);
 
   useEffect(() => {
     function onPasteEvent(event: ClipboardEvent) {

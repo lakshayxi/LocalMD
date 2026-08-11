@@ -19,6 +19,9 @@ import { renderMarkdown } from './pipeline-loader';
 export type Theme = 'system' | 'light' | 'dark';
 export type Status = 'empty' | 'loading' | 'ready' | 'error';
 
+/** Split arrives with the rest of M4; the editor spike only needs these two. */
+export type Mode = 'view' | 'edit';
+
 /**
  * Reading typeface.
  *
@@ -49,6 +52,10 @@ interface DocumentState {
    */
   allowRemoteContent: boolean;
 
+  mode: Mode;
+  /** Edited since it was opened. Saving clears it, which arrives with M4. */
+  dirty: boolean;
+
   theme: Theme;
   typeface: Typeface;
   outlinePinned: boolean;
@@ -59,6 +66,8 @@ interface DocumentState {
   open: (source: DocumentSource) => Promise<void>;
   openRecent: (recent: RecentDocument) => Promise<void>;
   forget: (id: string) => Promise<void>;
+  setMode: (mode: Mode) => Promise<void>;
+  updateText: (text: string) => void;
   close: () => void;
   setAllowRemoteContent: (allow: boolean) => Promise<void>;
   setTheme: (theme: Theme) => void;
@@ -94,6 +103,8 @@ export const useDocument = create<DocumentState>((set, get) => ({
   status: 'empty',
   error: null,
   allowRemoteContent: false,
+  mode: 'view',
+  dirty: false,
   theme: 'system',
   typeface: 'sans',
   outlinePinned: true,
@@ -121,7 +132,17 @@ export const useDocument = create<DocumentState>((set, get) => ({
       // implementation detail.
       const rendered = await renderMarkdown(text, { allowRemoteContent: false });
 
-      set({ text, shape, rendered, status: 'ready', allowRemoteContent: false });
+      set({
+        text,
+        shape,
+        rendered,
+        status: 'ready',
+        allowRemoteContent: false,
+        // Every document opens as something to read. Landing in Edit because
+        // the last one was edited would be the wrong default for a reader.
+        mode: 'view',
+        dirty: false,
+      });
 
       // Only handle-backed sources can be reopened, so only they are recorded.
       if (source instanceof FileHandleSource) {
@@ -172,6 +193,33 @@ export const useDocument = create<DocumentState>((set, get) => ({
     await get().refreshRecents();
   },
 
+  /**
+   * Records an edit.
+   *
+   * Deliberately does *not* re-render the preview. Nothing currently mounted
+   * subscribes to `text`, so a keystroke costs one store write and no React
+   * render at all — which is what keeps typing inside a frame on a large
+   * document. Re-rendering happens on the way back to View, and Split's live
+   * preview will need its own debounce when it lands.
+   */
+  updateText(text) {
+    set({ text, dirty: true });
+  },
+
+  async setMode(mode) {
+    const { mode: current, text, allowRemoteContent, status } = get();
+    if (mode === current || status !== 'ready') return;
+
+    set({ mode });
+
+    // Coming back from an edit, the rendered tree is stale by exactly the edits
+    // just made. Re-rendering on the way *out* rather than on every keystroke
+    // is the whole reason typing is cheap.
+    if (mode === 'view') {
+      set({ rendered: await renderMarkdown(text, { allowRemoteContent }) });
+    }
+  },
+
   close() {
     // A heading fragment belongs to the document that was open. Left in the
     // URL, it would scroll the *next* document to whichever of its headings
@@ -193,6 +241,8 @@ export const useDocument = create<DocumentState>((set, get) => ({
       status: 'empty',
       error: null,
       allowRemoteContent: false,
+      mode: 'view',
+      dirty: false,
     });
   },
 
