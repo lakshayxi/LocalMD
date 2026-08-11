@@ -6,6 +6,7 @@ import rehypeSanitize from 'rehype-sanitize';
 import rehypeSlug from 'rehype-slug';
 import remarkFrontmatter from 'remark-frontmatter';
 import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
 import remarkParse from 'remark-parse';
 import remarkRehype from 'remark-rehype';
 import { unified } from 'unified';
@@ -13,6 +14,9 @@ import { visit } from 'unist-util-visit';
 import { guardUrls } from './plugins/guard-urls';
 import { handleImages } from './plugins/images';
 import { hardenLinks } from './plugins/harden-links';
+import { highlight } from './plugins/highlight';
+import { math } from './plugins/math';
+import { extractMermaid } from './plugins/mermaid';
 import { convertTaskCheckboxes } from './plugins/task-lists';
 import { sanitizeSchema } from './sanitize-schema';
 import type { BlockedResource, Heading, RenderOptions, RenderResult } from './types';
@@ -83,6 +87,15 @@ export async function renderMarkdown(
     .use(remarkFrontmatter, ['yaml'])
     .use(captureFrontmatter, frontmatter)
     .use(remarkGfm)
+    // Single-dollar inline math is OFF. With it on, remark-math reads
+    // `$5.00 and $6.00` as a math span and renders it as mangled glyphs — and
+    // prices, `$PATH`, `$HOME`, and `${VAR}` are far more common in the
+    // documents this product targets than inline LaTeX is.
+    //
+    // Silently corrupting ordinary prose is a worse failure for a *reader* than
+    // requiring `$$x$$` for inline math, which still works. Revisit only with a
+    // per-document toggle, never by flipping this back on globally.
+    .use(remarkMath, { singleDollarTextMath: false })
     // allowDangerousHtml keeps raw HTML as raw nodes for rehype-raw to parse
     // properly. It is only "dangerous" until sanitization, three steps below.
     .use(remarkRehype, { allowDangerousHtml: true })
@@ -98,10 +111,18 @@ export async function renderMarkdown(
       properties: { className: ['lmd-heading-anchor'] },
     })
     .use(collectHeadings, headings)
+    // Math, highlighting, and diagram extraction each load their dependency
+    // only if the document actually contains that construct — see the plugins.
+    .use(math)
+    .use(extractMermaid)
+    .use(highlight)
     .use(handleImages, { allowRemote: options.allowRemoteContent === true, blocked })
     .use(hardenLinks);
 
-  const tree = processor.runSync(processor.parse(source)) as HastRoot;
+  // `run`, not `runSync`: Shiki and KaTeX are loaded on demand, which makes
+  // their transformers async. This is why the exported function has always
+  // returned a Promise.
+  const tree = (await processor.run(processor.parse(source))) as HastRoot;
 
   return { tree, frontmatter: frontmatter.value, headings, blocked };
 }

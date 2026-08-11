@@ -1,0 +1,162 @@
+/* Syntax highlighting, math, and diagrams. */
+
+/* ---------- Shiki ---------- */
+
+/* Shiki emits both palettes as custom properties on every token and lets CSS
+   choose. Switching theme is therefore a repaint, not a re-highlight — which
+   matters because re-highlighting a large document on every theme toggle would
+   be the slowest interaction in the reader. */
+
+.lmd-document .shiki,
+.lmd-document .shiki span {
+  color: var(--lmd-code-light);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .lmd-document .shiki,
+  :root:not([data-theme='light']) .lmd-document .shiki span {
+    color: var(--lmd-code-dark);
+  }
+}
+
+:root[data-theme='dark'] .lmd-document .shiki,
+:root[data-theme='dark'] .lmd-document .shiki span {
+  color: var(--lmd-code-dark);
+}
+
+:root[data-theme='light'] .lmd-document .shiki,
+:root[data-theme='light'] .lmd-document .shiki span {
+  color: var(--lmd-code-light);
+}
+
+/* Only token *colours* come from the theme. Backgrounds stay ours: Shiki's
+   github-light background is pure white, which would make a highlighted block
+   and an unhighlighted one look like two different components sitting next to
+   each other in the same document. */
+.lmd-document pre.shiki {
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-surface) !important;
+}
+
+.lmd-document pre.shiki code {
+  display: block;
+  background: none;
+}
+
+.lmd-document .shiki .line {
+  display: inline-block;
+  width: 100%;
+}
+
+/* ---------- KaTeX ---------- */
+
+.lmd-document .katex {
+  /* KaTeX runs optically large next to the prose face. */
+  font-size: 1.04em;
+}
+
+.lmd-document .katex-display {
+  margin: 1.5em 0 0;
+  padding: 0.2em 0;
+  /* Long equations scroll rather than widening the page. */
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+/* KaTeX renders parse failures as red source text. Give it a treatment that
+   reads as a diagnostic rather than as broken styling. */
+.lmd-document .katex-error {
+  padding: 0.1em 0.3em;
+  border-radius: 3px;
+  background: var(--warning-soft);
+  color: var(--warning) !important;
+  font-family: var(--font-mono);
+  font-size: 0.86em;
+}
+
+/* ---------- Mermaid ---------- */
+
+.lmd-mermaid-figure {
+  margin: 1.5em 0 0;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-surface);
+  text-align: center;
+  overflow-x: auto;
+}
+
+.lmd-mermaid-svg svg {
+  max-width: 100%;
+  height: auto;
+}
+
+/* Shown while the diagram is off-screen or still loading. Keeping the source
+   visible means a document that fails to render diagrams — or one being
+   printed — still communicates. */
+.lmd-mermaid-source {
+  margin: 0;
+  color: var(--fg-muted);
+  font-family: var(--font-mono);
+  font-size: 0.8em;
+  text-align: left;
+  white-space: pre;
+  overflow-x: auto;
+}
+
+.lmd-mermaid-error {
+  margin: 1.5em 0 0;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--border-strong);
+  border-left: 3px solid var(--warning);
+  border-radius: var(--radius);
+  background: var(--bg-surface);
+}
+
+.lmd-mermaid-error-title {
+  margin: 0 0 0.5em;
+  color: var(--warning);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+/* Mermaid's parse errors name the offending line and token, which is most of
+   the value of showing them at all. */
+.lmd-mermaid-error-message {
+  margin: 0 0 0.7em;
+  padding: 0.5em 0.7em;
+  border: 0;
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--fg-muted);
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  white-space: pre-wrap;
+  overflow-x: auto;
+}
+
+.lmd-mermaid-error details {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+}
+
+.lmd-mermaid-error summary {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--fg-muted);
+}
+
+.lmd-mermaid-error details[open] > summary {
+  margin-bottom: 0.5em;
+  padding-bottom: 0;
+  border: 0;
+}
+
+.lmd-mermaid-error details pre {
+  margin: 0;
+  font-size: 0.78rem;
+}

@@ -36,13 +36,31 @@
 
   --ui-size: 0.8125rem;
 
-  --font-prose: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto,
+  --font-system: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto,
     'Helvetica Neue', Arial, sans-serif;
+  --font-sans: 'Inter Variable', var(--font-system);
+  --font-serif: 'Source Serif 4 Variable', Charter, 'Bitstream Charter', Georgia, serif;
+
+  --font-prose: var(--font-sans);
   --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', 'JetBrains Mono', Menlo, Consolas,
     'Liberation Mono', monospace;
 
   --radius: 5px;
   --header-height: 40px;
+}
+
+/* Reading typeface. Application chrome always uses the system stack — it should
+   feel like the OS — so this only swaps the prose face inside the document.
+   The measure moves with it: `ch` is the width of the digit zero, which tracks
+   average character width differently per face, so a shared value gives ~71
+   characters in Inter but only ~55 in Source Serif 4. Measured, not guessed. */
+:root[data-typeface='serif'] {
+  --font-prose: var(--font-serif);
+  --prose-measure: 86ch;
+}
+
+:root[data-typeface='system'] {
+  --font-prose: var(--font-system);
 }
 
 :root[data-theme='dark'],

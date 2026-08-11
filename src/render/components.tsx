@@ -1,5 +1,6 @@
-import type { ComponentProps } from 'react';
+import type { ComponentProps, ReactNode } from 'react';
 import type { Components } from 'hast-util-to-jsx-runtime';
+import { Mermaid } from './Mermaid';
 
 /**
  * Component overrides for rendered Markdown.
@@ -44,7 +45,33 @@ function Table(props: ComponentProps<'table'>) {
   );
 }
 
+/**
+ * The pipeline marks Mermaid fences with a class and leaves the source as text
+ * (see core/markdown/plugins/mermaid.ts). Rendering needs a DOM, so it happens
+ * here rather than in the pipeline, which stays worker-ready.
+ */
+function Div({ className, children, ...rest }: ComponentProps<'div'>) {
+  const classes = typeof className === 'string' ? className.split(' ') : [];
+
+  if (classes.includes('lmd-mermaid')) {
+    return <Mermaid source={extractText(children)} />;
+  }
+
+  return (
+    <div className={className} {...rest}>
+      {children}
+    </div>
+  );
+}
+
+function extractText(children: ReactNode): string {
+  if (typeof children === 'string') return children;
+  if (Array.isArray(children)) return children.map(extractText).join('');
+  return '';
+}
+
 export const components: Components = {
   pre: Pre,
   table: Table,
+  div: Div,
 };

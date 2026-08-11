@@ -48,6 +48,35 @@ const ALLOWED = [
       'Ours. Used as the base URL for parsing image hosts in core/markdown/plugins/images.ts. ' +
       '.invalid is reserved by RFC 2606 and can never resolve, which is why it was chosen.',
   },
+
+  // Mermaid's parser stack (chevrotain, langium, marked) embeds documentation
+  // links in thrown error messages. All are string literals in error paths.
+  // Note these are deliberately narrow: allowlisting `https://github.com/`
+  // wholesale would make this check meaningless.
+  {
+    prefix: 'https://github.com/mermaid-js/mermaid',
+    why: 'Mermaid points at its own issue tracker in error text.',
+  },
+  {
+    prefix: 'https://github.com/chevrotain/',
+    why: 'chevrotain (Mermaid parser) links its issues from grammar error messages.',
+  },
+  {
+    prefix: 'https://github.com/markedjs/marked',
+    why: 'marked (Mermaid label parser) names its repo in a deprecation warning.',
+  },
+  {
+    prefix: 'https://chevrotain.io/docs/',
+    why: 'chevrotain grammar-error messages cite its own docs.',
+  },
+  {
+    prefix: 'https://langium.org/docs/',
+    why: 'langium cites its docs when it detects a cyclic service dependency.',
+  },
+  {
+    prefix: 'https://en.wikipedia.org/wiki/',
+    why: 'chevrotain cites the LL-parser article when reporting a left-recursion error.',
+  },
 ];
 
 /** URLs the document itself may reference at runtime are NOT covered here —

@@ -53,6 +53,41 @@ test('rendering a document full of remote references contacts nobody', async ({ 
   await expect(page.locator('.lmd-document img')).toHaveCount(0);
 });
 
+test('with the opt-in enabled, contacts only the hosts the document names', async ({ page }) => {
+  // The other half of the guarantee. Blocking by default is easy to verify;
+  // what matters equally is that *allowing* stays narrowly scoped — it must
+  // load the document's own images and nothing else. A telemetry ping, a font
+  // fetch, or an error report riding along on the opt-in would be exactly the
+  // leak the product claims to make impossible.
+  const network = recordCrossOriginRequests(page, APP_ORIGIN);
+
+  await page.goto('/');
+  await openPastedDocument(page, DOCUMENT_WITH_REMOTE_CONTENT);
+  await page.getByRole('button', { name: 'Load images' }).click();
+  await expect(page.locator('.lmd-blocked-image')).toHaveCount(0);
+  await page.waitForLoadState('networkidle');
+
+  const contacted = new Set(network.attempts.map((a) => new URL(a.url).host));
+  const declaredInDocument = new Set([
+    'img.shields.io',
+    'analytics.example.com',
+    'evil.example.com',
+  ]);
+
+  for (const host of contacted) {
+    expect(
+      declaredInDocument.has(host),
+      `contacted ${host}, which the document never referenced`,
+    ).toBe(true);
+  }
+
+  // Every request must be an image load. Anything else — a fetch, a script,
+  // a beacon — means something other than the image gate opened a connection.
+  for (const attempt of network.attempts) {
+    expect(attempt.resourceType, `unexpected ${attempt.resourceType} request`).toBe('image');
+  }
+});
+
 test('names the host that would be contacted, and loads only on request', async ({ page }) => {
   await page.goto('/');
   await openPastedDocument(page, DOCUMENT_WITH_REMOTE_CONTENT);

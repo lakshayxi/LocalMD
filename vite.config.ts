@@ -55,5 +55,12 @@ export default defineConfig({
     // See "Decisions locked" in the plan: verifiability comes from the repo and
     // observable network behavior, not from shipping maps.
     sourcemap: false,
+
+    // Vite inlines assets under 4KB as data: URIs, which silently turns KaTeX's
+    // smaller font files into `data:font/woff2` and gets them refused by
+    // `font-src 'self'`. Loosening the CSP to `font-src 'self' data:` would fix
+    // the symptom; keeping every font a real same-origin file keeps the
+    // directive meaning what it says.
+    assetsInlineLimit: (filePath) => !/\.(woff2?|ttf|otf|eot)$/i.test(filePath),
   },
 });

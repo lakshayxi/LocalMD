@@ -82,17 +82,41 @@ describe('frontmatter', () => {
 });
 
 describe('code blocks', () => {
-  it('preserves the language hint for the highlighter', async () => {
+  it('highlights a known language', async () => {
     const result = await html('```typescript\nconst x = 1;\n```');
 
-    expect(result).toContain('language-typescript');
+    expect(result).toContain('shiki');
+    expect(result).toContain('const');
+  });
+
+  it('emits both themes as CSS variables so switching needs no re-highlight', async () => {
+    const result = await html('```typescript\nconst x = 1;\n```');
+
+    expect(result).toContain('--lmd-code-light:');
+    expect(result).toContain('--lmd-code-dark:');
+  });
+
+  it('resolves common language aliases', async () => {
+    const result = await html('```js\nconst x = 1;\n```');
+
+    expect(result).toContain('shiki');
   });
 
   it('renders an unknown language as plain code rather than failing', async () => {
     const result = await html('```notarealanguage\nx\n```');
 
-    expect(result).toContain('<code');
+    // Silently plain, and the hint is preserved. An unrecognised fence tag is
+    // not an error the reader needs to hear about.
+    expect(result).toContain('language-notarealanguage');
     expect(result).toContain('x');
+    expect(result).not.toContain('shiki');
+  });
+
+  it('leaves unlabelled fences alone', async () => {
+    const result = await html('```\nplain text\n```');
+
+    expect(result).toContain('plain text');
+    expect(result).not.toContain('shiki');
   });
 
   it('escapes html inside code blocks', async () => {
@@ -120,6 +144,14 @@ describe('fixture corpus', () => {
 
     expect(result).not.toMatch(/<script/i);
     expect(result).not.toMatch(/\son[a-z]+=/i);
-    expect(result).not.toMatch(/javascript:/i);
+
+    // Checks the *attribute*, not the string. A document about XSS legitimately
+    // contains the text "javascript:" in prose and code spans — the long-document
+    // fixture is this project's own plan, which documents the blocked schemes —
+    // and rendering that correctly is a feature, not a failure. What must never
+    // appear is a URL attribute carrying the scheme.
+    expect(result).not.toMatch(/(?:href|src|srcset|action|formaction)\s*=\s*["']?\s*javascript:/i);
+    expect(result).not.toMatch(/(?:href|src)\s*=\s*["']?\s*data:image\/svg/i);
+    expect(result).not.toMatch(/(?:href|src)\s*=\s*["']?\s*vbscript:/i);
   });
 });

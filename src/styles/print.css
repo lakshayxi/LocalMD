@@ -1,0 +1,202 @@
+/* Print.
+ *
+ * Printing (and print-to-PDF) is how a Markdown document leaves LocalMD and
+ * becomes something a reader can send to someone else, so it is a first-class
+ * output rather than an afterthought — and an alpha gate item.
+ *
+ * Two things drive most of this file. Browsers drop background colours when
+ * printing unless asked otherwise, so anything that carried meaning through a
+ * background has to re-express it with a border. And nothing in the app chrome
+ * belongs on paper.
+ */
+
+@media print {
+  /* Always print the light palette: dark-mode output wastes ink and reads
+     badly, and the reader's screen theme says nothing about their printer. */
+  :root,
+  :root[data-theme='dark'],
+  :root[data-theme='light'] {
+    color-scheme: light;
+
+    --bg: #ffffff;
+    --bg-surface: #ffffff;
+    --bg-raised: #ffffff;
+    --fg: #000000;
+    --fg-muted: #333333;
+    --fg-subtle: #555555;
+    --border: #cccccc;
+    --border-strong: #999999;
+    --accent: #000000;
+    --warning: #000000;
+  }
+
+  .lmd-header,
+  .lmd-notice,
+  .lmd-toast,
+  .lmd-drop-overlay,
+  .lmd-landing {
+    display: none !important;
+  }
+
+  body {
+    background: #fff;
+  }
+
+  .lmd-document {
+    /* Letting the text run the full width of A4 gives roughly 100 characters
+       per line — measured, not guessed — which is well past the point where the
+       eye loses its place returning to the next line. The screen measure is too
+       narrow for paper and the full page is too wide, so print gets its own. */
+    max-width: 68ch;
+    margin: 0 auto;
+    padding: 0;
+    font-size: 11pt;
+    line-height: 1.5;
+  }
+
+  /* `ch` is the width of the digit zero, which tracks average character width
+     differently in each face — the same 68ch measures ~76 characters in Inter
+     but only ~60 in Source Serif 4. Measured, then set per face rather than
+     shared, so both land near the 70-character mark. */
+  :root[data-typeface='serif'] .lmd-document {
+    max-width: 80ch;
+  }
+
+  @page {
+    margin: 18mm 16mm;
+  }
+
+  /* Tables, code, and diagrams may still use the full page width — squeezing a
+     wide table into the prose measure to satisfy a rule about line length makes
+     the table unreadable to protect the paragraph beside it. */
+  .lmd-document :is(pre, .lmd-table-scroll, .lmd-mermaid-figure) {
+    width: 100vw;
+    max-width: calc(100% + 6rem);
+    margin-left: -3rem;
+    margin-right: -3rem;
+  }
+
+  /* ---------- Page breaks ---------- */
+
+  .lmd-document :is(h1, h2, h3, h4, h5, h6) {
+    /* A heading stranded at the foot of a page is the most common and most
+       irritating print defect. */
+    break-after: avoid;
+    break-inside: avoid;
+  }
+
+  .lmd-document :is(p, blockquote, li) {
+    /* Orphans and widows, in the typographic sense: never leave one line of a
+       paragraph alone on a page. */
+    orphans: 3;
+    widows: 3;
+  }
+
+  .lmd-document :is(pre, table, .lmd-mermaid-figure, .katex-display) {
+    break-inside: avoid;
+  }
+
+  .lmd-document img {
+    break-inside: avoid;
+    max-width: 100% !important;
+  }
+
+  /* ---------- Link destinations ---------- */
+
+  /* On paper a link is invisible unless its target is written out. Restricted
+     to external http(s) links: printing "#section-name" after every in-document
+     anchor would be noise, and heading anchors would print a URL after every
+     single heading. */
+  .lmd-document a[href^='http']:not(.lmd-heading-anchor)::after {
+    content: ' (' attr(href) ')';
+    font-size: 0.85em;
+    color: var(--fg-subtle);
+    word-break: break-all;
+  }
+
+  .lmd-document a {
+    color: #000;
+    text-decoration: underline;
+  }
+
+  .lmd-heading-anchor::after {
+    content: none !important;
+  }
+
+  /* ---------- Backgrounds become borders ---------- */
+
+  .lmd-document pre,
+  .lmd-document pre.shiki {
+    border: 1px solid #ccc;
+    background: #fff !important;
+    /* Code cannot scroll on paper; wrapping is the only way to keep it. */
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-size: 8.5pt;
+  }
+
+  /* Shiki bakes token colours into inline custom properties. Printers render
+     mid-tone syntax colours as muddy grey, so force black and let the type do
+     the work. */
+  .lmd-document .shiki,
+  .lmd-document .shiki span {
+    color: #000 !important;
+    background: transparent !important;
+  }
+
+  .lmd-document :not(pre) > code {
+    border: 1px solid #ddd;
+    background: #fff;
+  }
+
+  .lmd-document th {
+    background: #fff !important;
+    border-bottom: 2px solid #999;
+  }
+
+  .lmd-table-scroll {
+    overflow: visible;
+  }
+
+  .lmd-document details {
+    background: #fff;
+    border: 1px solid #ccc;
+  }
+
+  /* Collapsed sections are expanded by src/app/use-print-preparation.ts, not
+     here: a closed <details> hides its children through the element's own
+     state, so no CSS rule on those children can reveal them. */
+
+  /* ---------- Withheld images ---------- */
+
+  /* The screen affordance ("click to load") is meaningless on paper, so the
+     placeholder states plainly what is missing and why. */
+  .lmd-blocked-image::after {
+    content: ' — remote image, not loaded';
+    color: var(--fg-subtle);
+  }
+
+  .lmd-unresolved-image::after {
+    content: ' — image not available';
+    color: var(--fg-subtle);
+  }
+
+  .lmd-blocked-image::before,
+  .lmd-unresolved-image::before {
+    display: none;
+  }
+
+  /* ---------- Diagrams ---------- */
+
+  .lmd-mermaid-figure {
+    background: #fff;
+    border: 1px solid #ccc;
+  }
+
+  /* A diagram that never rendered — off-screen when printing, since rendering
+     is deferred until it approaches the viewport — falls back to its source,
+     which is more useful on paper than a blank frame. */
+  .lmd-mermaid-source {
+    color: #333;
+  }
+}

@@ -1,5 +1,6 @@
 import { useDocument } from '../store';
 import { ThemeToggle } from './ThemeToggle';
+import { TypefaceToggle } from './TypefaceToggle';
 
 /**
  * The application's only permanent chrome.
@@ -62,6 +63,7 @@ export function Header() {
             {allowRemote ? 'Remote content on' : 'Local'}
           </span>
         )}
+        <TypefaceToggle />
         <ThemeToggle />
       </div>
     </header>

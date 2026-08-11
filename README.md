@@ -5,10 +5,21 @@
 A browser-based Markdown reader — with editing when you need it — that never
 sends your document anywhere. No uploads, no accounts, no document backend.
 
-> **Status: M1.** You can open a Markdown file — by drop, picker, or paste —
-> and read it. CommonMark and GFM render with heading anchors, task lists,
-> footnotes, and tables, in light and dark themes. Syntax highlighting, math,
-> and Mermaid arrive in M2; editing and saving in M4.
+> **Status: M2.** Open a Markdown file — by drop, picker, or paste — and read
+> it. CommonMark and GFM with heading anchors, task lists, footnotes, and
+> tables; syntax highlighting, math, and Mermaid diagrams; light and dark
+> themes; sans and serif reading faces; and a print stylesheet. Editing and
+> saving arrive in M4.
+
+## A note on math delimiters
+
+Single-dollar inline math (`$x$`) is **off**. With it on, `$5.00 and $6.00`
+parses as a formula and renders as mangled glyphs — and prices, `$PATH`, and
+`${VAR}` are far more common in the documents this targets than inline LaTeX is.
+Use `$$x$$` for inline math; display math (`$$` on its own lines) is unchanged.
+
+Silently corrupting ordinary prose is a worse failure for a reader than
+requiring an extra dollar sign.
 
 ## Why
 

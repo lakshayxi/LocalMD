@@ -6,7 +6,12 @@ for later rendering.
 
 ## Inline math
 
-The complexity is $O(n \log n)$ for the sort, and $E = mc^2$ regardless.
+Delimited by double dollars — see the currency note below.
+
+The complexity is $$O(n \log n)$$ for the sort, and $$E = mc^2$$ regardless.
+
+Single dollars are deliberately NOT math, so prose like $5.00, $PATH, and
+${HOME} survives intact. See the note in pipeline.ts.
 
 ## Block math
 

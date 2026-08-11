@@ -1,5 +1,21 @@
+/* KaTeX's stylesheet, self-hosted. Vite rewrites its @font-face URLs to local
+   asset paths, which is what keeps `font-src 'self'` honest — the upstream CSS
+   would otherwise be the one place a remote font could slip in. The fonts
+   themselves are only fetched when a document actually contains math. */
+@import 'katex/dist/katex.min.css';
+
+/* Prose typefaces, self-hosted from npm rather than a font CDN — a webfont
+   request is a third-party request like any other, and Google Fonts would put
+   a per-page-load beacon inside a product whose entire claim is that it makes
+   none. Vite rewrites these to local asset URLs, keeping `font-src 'self'`
+   true. Latin subsets only: ~48KB each. */
+@import '@fontsource-variable/inter';
+@import '@fontsource-variable/source-serif-4';
+
 @import './tokens.css';
 @import './document.css';
+@import './rich.css';
+@import './print.css';
 
 /* Application chrome.
  *
@@ -143,6 +159,15 @@ body {
   border-color: var(--border);
   background: var(--bg-surface);
   color: var(--fg);
+}
+
+/* Shows the face it will switch *to*, so the control previews its own effect. */
+.lmd-typeface[data-face='sans'] {
+  font-family: var(--font-serif);
+}
+
+.lmd-typeface[data-face='serif'] {
+  font-family: var(--font-sans);
 }
 
 .lmd-chip.is-action {

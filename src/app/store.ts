@@ -9,6 +9,18 @@ import { renderMarkdown } from './pipeline-loader';
 export type Theme = 'system' | 'light' | 'dark';
 export type Status = 'empty' | 'loading' | 'ready' | 'error';
 
+/**
+ * Reading typeface.
+ *
+ * Sans is the default because the most common document here is a README or a
+ * CLAUDE.md — code-dense, and readers carry a strong sans expectation from
+ * GitHub and VS Code, so a serif default risks reading as *wrong* on first
+ * open. Serif measurably wins for long-form prose (measured on a 6,800-word
+ * document, on screen and in print), which is why it is one click away rather
+ * than absent.
+ */
+export type Typeface = 'sans' | 'serif';
+
 interface DocumentState {
   source: DocumentSource | null;
   /** Normalized to LF. The editor's source of truth from M4 onward. */
@@ -28,11 +40,13 @@ interface DocumentState {
   allowRemoteContent: boolean;
 
   theme: Theme;
+  typeface: Typeface;
 
   open: (source: DocumentSource) => Promise<void>;
   close: () => void;
   setAllowRemoteContent: (allow: boolean) => Promise<void>;
   setTheme: (theme: Theme) => void;
+  setTypeface: (typeface: Typeface) => void;
 }
 
 export const useDocument = create<DocumentState>((set, get) => ({
@@ -44,6 +58,7 @@ export const useDocument = create<DocumentState>((set, get) => ({
   error: null,
   allowRemoteContent: false,
   theme: 'system',
+  typeface: 'sans',
 
   async open(source) {
     set({ status: 'loading', error: null, source });
@@ -90,5 +105,14 @@ export const useDocument = create<DocumentState>((set, get) => ({
     const root = document.documentElement;
     if (theme === 'system') root.removeAttribute('data-theme');
     else root.setAttribute('data-theme', theme);
+  },
+
+  setTypeface(typeface) {
+    set({ typeface });
+    const root = document.documentElement;
+    // Sans is the default expressed in CSS, so the attribute is only set for
+    // the non-default choice.
+    if (typeface === 'sans') root.removeAttribute('data-typeface');
+    else root.setAttribute('data-typeface', typeface);
   },
 }));

@@ -4,10 +4,13 @@ import { Header } from './components/Header';
 import { Landing } from './components/Landing';
 import { RemoteContentNotice } from './components/RemoteContentNotice';
 import { useDocument } from './store';
+import { usePrintPreparation } from './use-print-preparation';
 
 export function App() {
   const status = useDocument((s) => s.status);
   const rendered = useDocument((s) => s.rendered);
+
+  usePrintPreparation();
 
   return (
     <DropTarget>
