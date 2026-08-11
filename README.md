@@ -5,11 +5,20 @@
 A browser-based Markdown reader — with editing when you need it — that never
 sends your document anywhere. No uploads, no accounts, no document backend.
 
-> **Status: M2.** Open a Markdown file — by drop, picker, or paste — and read
-> it. CommonMark and GFM with heading anchors, task lists, footnotes, and
-> tables; syntax highlighting, math, and Mermaid diagrams; light and dark
-> themes; sans and serif reading faces; and a print stylesheet. Editing and
-> saving arrive in M4.
+**Try it: <https://localmd-12t.pages.dev>**
+
+> **Status: public alpha (M2).** Open a Markdown file — by drop, picker, or
+> paste — and read it. CommonMark and GFM with heading anchors, task lists,
+> footnotes, and tables; syntax highlighting, math, and Mermaid diagrams; light
+> and dark themes; sans and serif reading faces; and a print stylesheet.
+>
+> This is an early build shared for feedback, not a launch. Editing and saving
+> arrive in M4. [Tell us what's broken](https://github.com/lakshayxi/LocalMD/issues).
+
+The privacy claim is verified against the live deployment on every release —
+see [reports/gate-a-production.md](reports/gate-a-production.md) for the
+response headers as actually served, and `scripts/verify-production.mjs` to
+re-run the checks yourself.
 
 ## A note on math delimiters
 
