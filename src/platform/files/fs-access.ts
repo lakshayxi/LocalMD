@@ -1,5 +1,5 @@
-import { decodeText } from '@/core/text/encoding';
-import type { DocumentContents, DocumentSource, SourceKind } from './types';
+import { decodeText, encodeText } from '@/core/text/encoding';
+import type { DocumentContents, DocumentSource, SaveOutcome, SourceKind } from './types';
 import { UnsupportedFileError } from './types';
 import { isAcceptedFilename } from './sources';
 
@@ -56,6 +56,30 @@ export class FileHandleSource implements DocumentSource {
   }
 
   /**
+   * Writes back to the file the reader opened.
+   *
+   * The one place the product's core loop is genuinely better than a download:
+   * ⌘S puts the bytes back where they came from, with the line endings and BOM
+   * they arrived with. A permission refusal is reported as `cancelled` rather
+   * than thrown — the reader said no, which is an answer, not a fault.
+   */
+  async save(contents: DocumentContents): Promise<SaveOutcome> {
+    if (!(await ensureWritePermission(this.handle))) return { kind: 'cancelled' };
+
+    await writeToHandle(this.handle, encodeText(contents.text, contents.shape));
+    // Size changed underneath us; recents shows it.
+    this.cachedSize = null;
+    return { kind: 'saved', source: this };
+  }
+
+  saveAs(contents: DocumentContents, suggestedName?: string): Promise<SaveOutcome> {
+    return saveWithPicker(
+      encodeText(contents.text, contents.shape),
+      suggestedName ?? this.handle.name,
+    );
+  }
+
+  /**
    * Modification time and size, for the external-change detection M4 needs.
    * Reading it costs a `getFile()` call, so it is separate from `read`.
    */
@@ -66,6 +90,85 @@ export class FileHandleSource implements DocumentSource {
     } catch {
       return null;
     }
+  }
+}
+
+/**
+ * Ensures we may write to a handle, prompting if the grant has lapsed.
+ *
+ * Read permission and write permission are separate grants. A handle restored
+ * from recents may be readable and not writable, so this must run before every
+ * in-place save rather than once at open — and it must be reached from a click,
+ * because the request needs a user activation.
+ */
+async function ensureWritePermission(handle: FileSystemFileHandle): Promise<boolean> {
+  const query = handle.queryPermission?.bind(handle);
+  const request = handle.requestPermission?.bind(handle);
+  // No permissions API means nothing to ask for; `createWritable` will throw on
+  // its own if the write is genuinely disallowed.
+  if (!query || !request) return true;
+
+  const options = { mode: 'readwrite' } as const;
+  if ((await query(options)) === 'granted') return true;
+
+  try {
+    return (await request(options)) === 'granted';
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Writes to a handle.
+ *
+ * `createWritable` opens a swap file and `close` atomically moves it into
+ * place, so a failure part-way through leaves the reader's original intact
+ * rather than truncated. That is the entire reason for the ceremony.
+ */
+async function writeToHandle(handle: FileSystemFileHandle, encoded: string): Promise<void> {
+  const writable = await handle.createWritable();
+  try {
+    await writable.write(encoded);
+  } catch (error) {
+    // Abandon the swap file rather than leaving it behind; `close` on a failed
+    // write would commit whatever did land.
+    await writable.abort?.();
+    throw error;
+  }
+  await writable.close();
+}
+
+const SAVE_PICKER_TYPES = [
+  {
+    description: 'Markdown',
+    accept: { 'text/markdown': ['.md', '.markdown', '.mdown', '.mkd', '.txt'] },
+  },
+];
+
+/**
+ * Save As. Resolves `cancelled` when the reader dismisses the dialog, which is
+ * a decision rather than a failure and must leave the document untouched.
+ */
+export async function saveWithPicker(
+  encoded: string,
+  suggestedName: string,
+): Promise<SaveOutcome> {
+  try {
+    if (!window.showSaveFilePicker) return { kind: 'cancelled' };
+
+    const handle = await window.showSaveFilePicker({
+      suggestedName,
+      types: SAVE_PICKER_TYPES,
+    });
+
+    await writeToHandle(handle, encoded);
+    // The document now belongs to the new file: subsequent saves write here.
+    return { kind: 'saved', source: new FileHandleSource(handle) };
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      return { kind: 'cancelled' };
+    }
+    throw error;
   }
 }
 

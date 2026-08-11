@@ -23,11 +23,17 @@ export function useShortcuts({
   onOpen,
   onPaste,
   onToggleMode,
+  onToggleSplit,
+  onSave,
+  onSaveAs,
 }: {
   onPalette: () => void;
   onOpen: () => void;
   onPaste: (text: string) => void;
   onToggleMode: () => void;
+  onToggleSplit: () => void;
+  onSave: () => void;
+  onSaveAs: () => void;
 }): void {
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -45,11 +51,28 @@ export function useShortcuts({
         return;
       }
 
-      // ⌘E also has to work from inside the editor — it is how you get *out* of
-      // Edit mode, and CodeMirror's content counts as a text field.
+      // These three all have to work from inside the editor: ⌘E is how you get
+      // *out* of Edit mode, ⌘S is most wanted precisely while typing, and
+      // CodeMirror's content counts as a text field.
       if (key === 'e') {
         event.preventDefault();
         onToggleMode();
+        return;
+      }
+
+      if (key === '\\') {
+        event.preventDefault();
+        onToggleSplit();
+        return;
+      }
+
+      // Taking ⌘S from the browser is the point: "Save Page As" is never what
+      // someone means here, and letting it through would save the *application*
+      // instead of the document.
+      if (key === 's') {
+        event.preventDefault();
+        if (event.shiftKey) onSaveAs();
+        else onSave();
         return;
       }
 
@@ -63,7 +86,7 @@ export function useShortcuts({
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [onPalette, onOpen, onToggleMode]);
+  }, [onPalette, onOpen, onToggleMode, onToggleSplit, onSave, onSaveAs]);
 
   useEffect(() => {
     function onPasteEvent(event: ClipboardEvent) {

@@ -265,6 +265,21 @@ function usePaletteGroups({
         ...(store.source
           ? [
               {
+                // Labelled from the source's own capability, so the word matches
+                // what will actually happen on this browser. Safari and Firefox
+                // read "Download" and are not told they are missing anything.
+                id: 'save',
+                label: store.source.canSaveInPlace ? 'Save' : 'Download',
+                hint: `${MOD_KEY}S`,
+                run: act(() => void store.save()),
+              },
+              {
+                id: 'save-as',
+                label: 'Save as…',
+                hint: `${MOD_KEY}⇧S`,
+                run: act(() => void store.saveAs()),
+              },
+              {
                 id: 'close',
                 label: 'Close document',
                 run: act(store.close),

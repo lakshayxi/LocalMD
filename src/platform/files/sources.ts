@@ -1,6 +1,42 @@
-import { decodeText } from '@/core/text/encoding';
-import type { DocumentContents, DocumentSource, SourceKind } from './types';
+import { decodeText, encodeText } from '@/core/text/encoding';
+import { downloadText } from './download';
+import { saveWithPicker, supportsFileSystemAccess } from './fs-access';
+import type { DocumentContents, DocumentSource, SaveOutcome, SourceKind } from './types';
 import { UnsupportedFileError } from './types';
+
+/**
+ * Saving for sources with no way back to an original file.
+ *
+ * Shared by the picked-file and in-memory sources because their situation is
+ * identical: there is no handle, so every save is a new file. Where the File
+ * System Access API exists the reader still gets to choose where it goes —
+ * having opened by drag-drop should not cost you the save dialog — and
+ * everywhere else it becomes a download.
+ */
+async function saveAsNewFile(
+  contents: DocumentContents,
+  suggestedName: string,
+): Promise<SaveOutcome> {
+  const encoded = encodeText(contents.text, contents.shape);
+  const filename = withExtension(suggestedName);
+
+  if (supportsFileSystemAccess()) {
+    return saveWithPicker(encoded, filename);
+  }
+
+  downloadText(filename, encoded);
+  return { kind: 'downloaded', name: filename };
+}
+
+/**
+ * A pasted document is displayed as "Pasted document", which is the right thing
+ * to read in the header and the wrong thing to write to disk — it would land as
+ * an extensionless file that the reader's own machine no longer recognises as
+ * Markdown.
+ */
+function withExtension(name: string): string {
+  return isAcceptedFilename(name) ? name : `${name}.md`;
+}
 
 /**
  * Extensions LocalMD will open. `.mdx` is accepted but treated as plain
@@ -57,6 +93,19 @@ export class BlobFileSource implements DocumentSource {
     // decodes as UTF-8, which is the only encoding worth supporting here.
     return decodeText(await this.file.text());
   }
+
+  /**
+   * A dropped or picked file cannot be written back to — the browser gave us
+   * its bytes, not its location — so Save and Save As are the same operation.
+   * The reader still chooses the destination wherever the picker exists.
+   */
+  save(contents: DocumentContents): Promise<SaveOutcome> {
+    return saveAsNewFile(contents, this.name);
+  }
+
+  saveAs(contents: DocumentContents, suggestedName?: string): Promise<SaveOutcome> {
+    return saveAsNewFile(contents, suggestedName ?? this.name);
+  }
 }
 
 /**
@@ -77,6 +126,14 @@ export class MemorySource implements DocumentSource {
 
   async read(): Promise<DocumentContents> {
     return decodeText(this.text);
+  }
+
+  save(contents: DocumentContents): Promise<SaveOutcome> {
+    return saveAsNewFile(contents, this.name);
+  }
+
+  saveAs(contents: DocumentContents, suggestedName?: string): Promise<SaveOutcome> {
+    return saveAsNewFile(contents, suggestedName ?? this.name);
   }
 }
 

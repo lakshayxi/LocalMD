@@ -296,6 +296,72 @@ body {
   font-size: 0.875rem;
 }
 
+/* ---------- Segmented mode control ---------- */
+
+.lmd-segmented {
+  display: flex;
+  gap: 1px;
+  padding: 1px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-surface);
+}
+
+.lmd-segment {
+  padding: 0.1rem 0.45rem;
+  border: 0;
+  border-radius: calc(var(--radius) - 2px);
+  background: none;
+  color: var(--fg-muted);
+  font: inherit;
+  font-size: var(--ui-size);
+  cursor: pointer;
+}
+
+.lmd-segment:hover {
+  color: var(--fg);
+}
+
+.lmd-segment[aria-pressed='true'] {
+  background: var(--bg-raised);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 8%);
+  color: var(--fg);
+}
+
+/* ---------- Split ---------- */
+
+.lmd-split {
+  display: grid;
+  /* Even halves. A draggable divider is a v1.1 affordance; two equal columns
+     are what the reader expects and what needs no explanation. */
+  grid-template-columns: 1fr 1fr;
+  height: calc(100dvh - var(--header-height));
+}
+
+.lmd-split-pane {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  min-width: 0;
+}
+
+.lmd-split-pane.is-preview {
+  border-left: 1px solid var(--border);
+}
+
+/* The document sets its own generous page padding, which is right in a full
+   window and far too much inside half of one. */
+.lmd-split-pane.is-preview .lmd-document {
+  padding: 1.5rem 1.5rem 6rem;
+}
+
+.lmd-split-pane .lmd-editor {
+  min-height: 0;
+}
+
+.lmd-split-pane .lmd-notice {
+  margin: 1rem auto 0;
+}
+
 /* ---------- Editor ---------- */
 
 .lmd-editor {
@@ -774,6 +840,12 @@ body {
   font-size: 0.8125rem;
 }
 
+.lmd-toast.is-error {
+  border-color: var(--warning);
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+
 .lmd-toast-close {
   flex: none;
   border: 0;
@@ -781,4 +853,8 @@ body {
   color: var(--accent);
   font: inherit;
   cursor: pointer;
+}
+
+.lmd-toast.is-error .lmd-toast-close {
+  color: var(--warning);
 }

@@ -117,6 +117,29 @@ test('the command palette is clean', async ({ page, browserName }) => {
   await expectClean(page, ['scrollable-region-focusable']);
 });
 
+test('the editor is clean', async ({ page }) => {
+  await openDocument(page);
+  await page.getByRole('button', { name: 'Edit', exact: true }).click();
+  await expect(page.locator('.cm-content')).toBeVisible();
+
+  // CodeMirror's contenteditable surface is the kind of thing that regresses
+  // quietly: it must keep a name and a role, and the syntax colours have to
+  // meet contrast like any other text.
+  await expectClean(page);
+});
+
+test('the split layout is clean', async ({ page }) => {
+  await page.setViewportSize({ width: 1400, height: 900 });
+  await openDocument(page);
+  await page.getByRole('button', { name: 'Split', exact: true }).click();
+  await expect(page.locator('.lmd-split')).toBeVisible();
+
+  // No suppression here, unlike the palette: both panes contain genuinely
+  // focusable content — the editor's contenteditable and the preview's links —
+  // so the rule is satisfied honestly rather than waived.
+  await expectClean(page);
+});
+
 test('both themes meet contrast', async ({ page }) => {
   await openDocument(page);
 

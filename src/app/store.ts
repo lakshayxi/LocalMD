@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import type { RenderResult } from '@/core/markdown';
 import type { TextShape } from '@/core/text/encoding';
-import type { DocumentSource } from '@/platform/files';
+import type { DocumentContents, DocumentSource, SaveOutcome } from '@/platform/files';
 import { FileHandleSource } from '@/platform/files';
 import type { RecentDocument, StoredPrefs } from '@/platform/persistence';
 import {
@@ -19,8 +19,23 @@ import { renderMarkdown } from './pipeline-loader';
 export type Theme = 'system' | 'light' | 'dark';
 export type Status = 'empty' | 'loading' | 'ready' | 'error';
 
-/** Split arrives with the rest of M4; the editor spike only needs these two. */
-export type Mode = 'view' | 'edit';
+export interface Notice {
+  kind: 'info' | 'error';
+  message: string;
+}
+
+/** Split is only offered above 1024px; below that it collapses to Edit. */
+export type Mode = 'view' | 'edit' | 'split';
+
+/**
+ * Trailing debounce on the live preview in Split.
+ *
+ * Long enough that a burst of typing produces one render rather than one per
+ * character, short enough that pausing feels like the preview kept up. The
+ * plan's number, and it holds up: the pipeline renders 243KB in ~256ms, so the
+ * debounce — not the render — is what the reader perceives.
+ */
+const PREVIEW_DEBOUNCE_MS = 120;
 
 /**
  * Reading typeface.
@@ -53,8 +68,11 @@ interface DocumentState {
   allowRemoteContent: boolean;
 
   mode: Mode;
-  /** Edited since it was opened. Saving clears it, which arrives with M4. */
+  /** Edited since it was last saved. */
   dirty: boolean;
+  saving: boolean;
+  /** Transient feedback for a save. A save with no acknowledgement is a save you do not trust. */
+  notice: Notice | null;
 
   theme: Theme;
   typeface: Typeface;
@@ -68,6 +86,9 @@ interface DocumentState {
   forget: (id: string) => Promise<void>;
   setMode: (mode: Mode) => Promise<void>;
   updateText: (text: string) => void;
+  save: () => Promise<void>;
+  saveAs: () => Promise<void>;
+  dismissNotice: () => void;
   close: () => void;
   setAllowRemoteContent: (allow: boolean) => Promise<void>;
   setTheme: (theme: Theme) => void;
@@ -75,6 +96,7 @@ interface DocumentState {
   setOutlinePinned: (pinned: boolean) => void;
   hydrate: () => Promise<void>;
   refreshRecents: () => Promise<void>;
+  refreshPreview: () => Promise<void>;
 }
 
 function persist(state: Pick<DocumentState, 'theme' | 'typeface' | 'outlinePinned'>): void {
@@ -83,6 +105,88 @@ function persist(state: Pick<DocumentState, 'theme' | 'typeface' | 'outlinePinne
     typeface: state.typeface,
     outlinePinned: state.outlinePinned,
   });
+}
+
+/**
+ * Split's live-preview debounce, and the guard against out-of-order renders.
+ *
+ * Module-scoped rather than in the store: they are scheduling machinery, not
+ * state anything renders from, and putting a timer id in the store would
+ * notify every subscriber each time a key is pressed.
+ */
+let previewTimer: ReturnType<typeof setTimeout> | undefined;
+let previewGeneration = 0;
+
+function schedulePreview(get: () => DocumentState): void {
+  clearTimeout(previewTimer);
+  previewTimer = setTimeout(() => void get().refreshPreview(), PREVIEW_DEBOUNCE_MS);
+}
+
+function cancelPreview(): void {
+  clearTimeout(previewTimer);
+  previewTimer = undefined;
+}
+
+/**
+ * The shared body of Save and Save As.
+ *
+ * Both have the same shape and the same three outcomes, and the difference —
+ * whether a picker opens — belongs to the source. Sharing it here keeps the two
+ * from drifting apart on the parts that actually matter: clearing dirty only on
+ * a real write, adopting a new handle after Save As, and never reporting
+ * success for a cancelled dialog.
+ */
+async function performSave(
+  set: (partial: Partial<DocumentState>) => void,
+  get: () => DocumentState,
+  run: (source: DocumentSource, contents: DocumentContents) => Promise<SaveOutcome>,
+): Promise<void> {
+  const { source, text, shape, status, saving } = get();
+  // Re-entry is real: ⌘S held down, or a click while the picker is already up.
+  if (!source || !shape || status !== 'ready' || saving) return;
+
+  set({ saving: true, notice: null });
+
+  try {
+    const outcome = await run(source, { text, shape });
+
+    if (outcome.kind === 'cancelled') return;
+
+    if (outcome.kind === 'downloaded') {
+      // Dirty clears because the reader's work is now durable somewhere. Saying
+      // otherwise would make the navigation guard nag about a document they
+      // just saved.
+      // `outcome.name`, not `source.name`: a pasted document displays as
+      // "Pasted document" and is written as "Pasted document.md", and the
+      // message has to name the file that actually exists.
+      set({ dirty: false, notice: { kind: 'info', message: `Downloaded ${outcome.name}.` } });
+      return;
+    }
+
+    // Save As hands back a handle to the *new* file, and from here on ⌘S must
+    // write there rather than to the original.
+    set({
+      source: outcome.source,
+      dirty: false,
+      notice: { kind: 'info', message: `Saved ${outcome.source.name}.` },
+    });
+
+    if (outcome.source instanceof FileHandleSource) {
+      await recordRecent(outcome.source.handle, outcome.source.size);
+      await get().refreshRecents();
+    }
+  } catch (error) {
+    // The document stays open and stays dirty. A failed save must never look
+    // like a successful one, and must never cost the reader their text.
+    set({
+      notice: {
+        kind: 'error',
+        message: error instanceof Error ? error.message : 'That file could not be saved.',
+      },
+    });
+  } finally {
+    set({ saving: false });
+  }
 }
 
 /** Applies preferences to the document element, which is where CSS reads them. */
@@ -105,6 +209,8 @@ export const useDocument = create<DocumentState>((set, get) => ({
   allowRemoteContent: false,
   mode: 'view',
   dirty: false,
+  saving: false,
+  notice: null,
   theme: 'system',
   typeface: 'sans',
   outlinePinned: true,
@@ -142,6 +248,7 @@ export const useDocument = create<DocumentState>((set, get) => ({
         // the last one was edited would be the wrong default for a reader.
         mode: 'view',
         dirty: false,
+        notice: null,
       });
 
       // Only handle-backed sources can be reopened, so only they are recorded.
@@ -196,28 +303,64 @@ export const useDocument = create<DocumentState>((set, get) => ({
   /**
    * Records an edit.
    *
-   * Deliberately does *not* re-render the preview. Nothing currently mounted
-   * subscribes to `text`, so a keystroke costs one store write and no React
-   * render at all — which is what keeps typing inside a frame on a large
-   * document. Re-rendering happens on the way back to View, and Split's live
-   * preview will need its own debounce when it lands.
+   * In View and Edit this deliberately does *not* re-render the preview.
+   * Nothing mounted subscribes to `text`, so a keystroke costs one store write
+   * and no React render at all — which is what keeps typing inside a frame on a
+   * large document. Split is the exception, because there the preview is on
+   * screen, and it pays for that with a debounce rather than a render per key.
    */
   updateText(text) {
     set({ text, dirty: true });
+    if (get().mode === 'split') schedulePreview(get);
   },
 
   async setMode(mode) {
-    const { mode: current, text, allowRemoteContent, status } = get();
+    const { mode: current, status } = get();
     if (mode === current || status !== 'ready') return;
 
+    cancelPreview();
     set({ mode });
 
     // Coming back from an edit, the rendered tree is stale by exactly the edits
-    // just made. Re-rendering on the way *out* rather than on every keystroke
-    // is the whole reason typing is cheap.
-    if (mode === 'view') {
-      set({ rendered: await renderMarkdown(text, { allowRemoteContent }) });
-    }
+    // just made. Re-rendering on the way *out* of editing, rather than on every
+    // keystroke, is the whole reason typing is cheap.
+    if (mode !== 'edit') await get().refreshPreview();
+  },
+
+  /**
+   * Re-renders the preview from the current text.
+   *
+   * Guarded by a generation counter because renders are async and a fast typist
+   * can start a second one before the first resolves. Without it, an older,
+   * slower render can land last and put stale content on screen — the classic
+   * async-race bug, and a particularly confusing one in a live preview.
+   */
+  async refreshPreview() {
+    const { text, allowRemoteContent } = get();
+    const generation = ++previewGeneration;
+
+    const rendered = await renderMarkdown(text, { allowRemoteContent });
+    if (generation !== previewGeneration) return;
+
+    set({ rendered });
+  },
+
+  /**
+   * Writes the document back where it came from, or downloads it.
+   *
+   * The whole difference between the two is `canSaveInPlace`, decided inside
+   * the source. Nothing here branches on which browser is running.
+   */
+  async save() {
+    await performSave(set, get, (source, contents) => source.save(contents));
+  },
+
+  async saveAs() {
+    await performSave(set, get, (source, contents) => source.saveAs(contents));
+  },
+
+  dismissNotice() {
+    set({ notice: null });
   },
 
   close() {
@@ -243,6 +386,7 @@ export const useDocument = create<DocumentState>((set, get) => ({
       allowRemoteContent: false,
       mode: 'view',
       dirty: false,
+      notice: null,
     });
   },
 

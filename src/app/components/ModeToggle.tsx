@@ -1,24 +1,33 @@
+import type { Mode } from '../store';
 import { MOD_KEY } from '../format';
 import { useDocument } from '../store';
+import { useSplitAvailable } from '../use-media-query';
 
 /**
- * Read / Edit.
+ * Read / Edit / Split.
  *
- * A two-state control, so a segmented pair of buttons would spend twice the
- * header width to say the same thing as one label. Split joins this as a third
- * state on wide screens later in M4, at which point it becomes a real segmented
- * control — two states do not justify one yet.
+ * A segmented control rather than a cycling chip, because three states cannot
+ * be cycled without making the third one two clicks away, and Split is the one
+ * a power user reaches for most.
  *
- * The dirty dot lives beside it rather than next to the filename because this
- * is where the eye already is once editing has started.
+ * Split disappears below 1024px rather than being shown disabled: a control
+ * that cannot be used teaches nothing, and there is no room to explain why in
+ * a 40px header. The keyboard shortcut is inert at those widths for the same
+ * reason.
  */
+const OPTIONS: { mode: Mode; label: string; key: string }[] = [
+  { mode: 'view', label: 'Read', key: 'E' },
+  { mode: 'edit', label: 'Edit', key: 'E' },
+  { mode: 'split', label: 'Split', key: '\\' },
+];
+
 export function ModeToggle() {
   const mode = useDocument((s) => s.mode);
   const dirty = useDocument((s) => s.dirty);
   const setMode = useDocument((s) => s.setMode);
+  const splitAvailable = useSplitAvailable();
 
-  const next = mode === 'edit' ? 'view' : 'edit';
-  const label = mode === 'edit' ? 'Editing' : 'Reading';
+  const options = splitAvailable ? OPTIONS : OPTIONS.filter((o) => o.mode !== 'split');
 
   return (
     <>
@@ -28,14 +37,22 @@ export function ModeToggle() {
           <span className="lmd-visually-hidden">Unsaved changes</span>
         </span>
       )}
-      <button
-        type="button"
-        className="lmd-chip"
-        onClick={() => void setMode(next)}
-        aria-label={`${label}. Switch to ${next === 'edit' ? 'editing' : 'reading'}. ${MOD_KEY}E`}
-      >
-        {label}
-      </button>
+      <div className="lmd-segmented" role="group" aria-label="Display mode">
+        {options.map((option) => (
+          <button
+            key={option.mode}
+            type="button"
+            className="lmd-segment"
+            // `aria-pressed` rather than `aria-current`: these are toggle
+            // buttons choosing a mode, not links marking a location.
+            aria-pressed={mode === option.mode}
+            onClick={() => void setMode(option.mode)}
+            title={`${option.label} (${MOD_KEY}${option.key})`}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
     </>
   );
 }

@@ -38,6 +38,15 @@ interface OpenFilePickerOptions {
   startIn?: FileSystemHandle | 'desktop' | 'documents' | 'downloads';
 }
 
+interface SaveFilePickerOptions {
+  suggestedName?: string;
+  excludeAcceptAllOption?: boolean;
+  types?: FilePickerAcceptType[];
+  id?: string;
+  startIn?: FileSystemHandle | 'desktop' | 'documents' | 'downloads';
+}
+
 interface Window {
   showOpenFilePicker?(options?: OpenFilePickerOptions): Promise<FileSystemFileHandle[]>;
+  showSaveFilePicker?(options?: SaveFilePickerOptions): Promise<FileSystemFileHandle>;
 }

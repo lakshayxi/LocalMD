@@ -78,7 +78,9 @@ async function moveToEnd(page: Page) {
 }
 
 async function enterEditMode(page: Page) {
-  await page.getByRole('button', { name: /Reading\./ }).click();
+  // `exact`, because the typeface control is labelled "Reading typeface: …"
+  // and would otherwise match too.
+  await page.getByRole('button', { name: 'Edit', exact: true }).click();
   await expect(page.locator('.cm-content')).toBeVisible();
 }
 
@@ -103,10 +105,10 @@ test.describe('lazy loading', () => {
 
     const elapsed = await page.evaluate(async () => {
       const start = performance.now();
-      const button = [...document.querySelectorAll('button')].find((b) =>
-        b.getAttribute('aria-label')?.startsWith('Reading.'),
+      const button = [...document.querySelectorAll('.lmd-segment')].find(
+        (b) => b.textContent === 'Edit',
       );
-      button?.click();
+      (button as HTMLButtonElement | undefined)?.click();
 
       await new Promise<void>((resolve) => {
         const tick = () => (document.querySelector('.cm-content') ? resolve() : requestAnimationFrame(tick));
@@ -246,11 +248,11 @@ test.describe('editing behaviour', () => {
     await moveToEnd(page);
     await page.keyboard.type('\n\n## Added while editing\n');
 
-    await page.getByRole('button', { name: /Editing\./ }).click();
+    await page.getByRole('button', { name: 'Read', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Added while editing' })).toBeVisible();
 
     // And back again, with the edit still in the source.
-    await page.getByRole('button', { name: /Reading\./ }).click();
+    await page.getByRole('button', { name: 'Edit', exact: true }).click();
     await expect(page.locator('.cm-content')).toContainText('Added while editing');
 
     expect(browserName).toBeTruthy();

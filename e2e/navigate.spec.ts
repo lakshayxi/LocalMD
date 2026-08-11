@@ -83,8 +83,9 @@ test.describe('command palette', () => {
     await openDocument(page);
     await page.keyboard.press(`${modifier(browserName)}+k`);
 
-    // With a document open, ⌘K is almost always "jump to a section".
-    const groups = page.getByRole('group');
+    // With a document open, ⌘K is almost always "jump to a section". Scoped to
+    // the dialog: the header's mode control is a group too.
+    const groups = page.getByRole('dialog').getByRole('group');
     await expect(groups.first()).toHaveAccessibleName('Go to');
 
     await expect(page.getByRole('option', { name: 'Prerequisites' })).toBeVisible();
