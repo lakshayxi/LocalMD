@@ -5,10 +5,10 @@
 A browser-based Markdown reader — with editing when you need it — that never
 sends your document anywhere. No uploads, no accounts, no document backend.
 
-> **Status: M0.** Scaffolding and guardrails only. There is no product yet —
-> the reading experience lands in M1. What exists today is the security,
-> privacy, and testing infrastructure that everything else gets built on top of,
-> deliberately built first.
+> **Status: M1.** You can open a Markdown file — by drop, picker, or paste —
+> and read it. CommonMark and GFM render with heading anchors, task lists,
+> footnotes, and tables, in light and dark themes. Syntax highlighting, math,
+> and Mermaid arrive in M2; editing and saving in M4.
 
 ## Why
 

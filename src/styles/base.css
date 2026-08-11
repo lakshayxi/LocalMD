@@ -1,22 +1,11 @@
-/* Minimal reset + tokens. The real typography system is M1 — this is only
-   enough to make the M0 shell legible and to prove the CSS pipeline works. */
+@import './tokens.css';
+@import './document.css';
 
-:root {
-  --bg: #ffffff;
-  --fg: #1a1a1a;
-  --fg-muted: #6a6a6a;
-
-  --font-prose: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
-  --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #16171a;
-    --fg: #e8e8e8;
-    --fg-muted: #9a9a9a;
-  }
-}
+/* Application chrome.
+ *
+ * Everything here is furniture. If a rule in this file competes for attention
+ * with the document, it is wrong.
+ */
 
 *,
 *::before,
@@ -24,36 +13,28 @@
   box-sizing: border-box;
 }
 
-html {
-  color-scheme: light dark;
+html,
+body {
+  margin: 0;
+  height: 100%;
 }
 
 body {
-  margin: 0;
   background: var(--bg);
   color: var(--fg);
   font-family: var(--font-prose);
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-.boot {
-  display: grid;
-  place-content: center;
-  gap: 0.25rem;
-  min-height: 100dvh;
-  text-align: center;
+#root {
+  min-height: 100%;
 }
 
-.boot h1 {
-  margin: 0;
-  font-size: 1.5rem;
-  font-weight: 600;
-  letter-spacing: -0.02em;
-}
-
-.boot p {
-  margin: 0;
-  color: var(--fg-muted);
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 3px;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -64,4 +45,294 @@ body {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/* ---------- Header ---------- */
+
+.lmd-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  height: var(--header-height);
+  padding: 0 0.75rem;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: blur(8px);
+  font-size: var(--ui-size);
+}
+
+.lmd-header-left,
+.lmd-header-right {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.lmd-wordmark {
+  flex: none;
+  padding: 0.2rem 0.35rem;
+  border: 0;
+  border-radius: var(--radius);
+  background: none;
+  color: var(--fg);
+  font: inherit;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  cursor: pointer;
+}
+
+.lmd-wordmark:hover {
+  background: var(--bg-surface);
+}
+
+/* Rendered as a span when there is no document to close, so it must not offer
+   affordances it cannot honor. */
+.lmd-wordmark.is-static {
+  cursor: default;
+}
+
+.lmd-wordmark.is-static:hover {
+  background: none;
+}
+
+.lmd-sep {
+  color: var(--fg-subtle);
+}
+
+.lmd-filename {
+  overflow: hidden;
+  color: var(--fg-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The trust indicator. Quiet when everything is local — which is almost always
+   — and only picks up weight when a decision is pending. */
+.lmd-privacy {
+  flex: none;
+  padding: 0.15rem 0.45rem;
+  border-radius: 999px;
+  background: var(--bg-surface);
+  color: var(--fg-muted);
+  font-size: 0.9em;
+}
+
+.lmd-privacy.is-blocking {
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+
+/* ---------- Buttons ---------- */
+
+.lmd-chip {
+  padding: 0.2rem 0.5rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  background: none;
+  color: var(--fg-muted);
+  font: inherit;
+  cursor: pointer;
+}
+
+.lmd-chip:hover {
+  border-color: var(--border);
+  background: var(--bg-surface);
+  color: var(--fg);
+}
+
+.lmd-chip.is-action {
+  flex: none;
+  border-color: var(--border-strong);
+  background: var(--bg-raised);
+  color: var(--fg);
+}
+
+.lmd-button {
+  padding: 0.45rem 0.9rem;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--bg-raised);
+  color: var(--fg);
+  font: inherit;
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+.lmd-button:hover {
+  background: var(--bg-surface);
+}
+
+.lmd-button.is-primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+
+.lmd-button.is-primary:hover {
+  filter: brightness(1.08);
+}
+
+/* ---------- Landing ---------- */
+
+.lmd-landing {
+  display: grid;
+  place-items: center;
+  min-height: calc(100dvh - var(--header-height));
+  padding: 2rem 1.5rem 6rem;
+}
+
+.lmd-landing-inner {
+  width: 100%;
+  max-width: 26rem;
+  text-align: center;
+}
+
+.lmd-landing-title {
+  margin: 0;
+  font-size: 1.6rem;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+}
+
+.lmd-landing-sub {
+  margin: 0.3rem 0 2rem;
+  color: var(--fg-muted);
+}
+
+.lmd-landing-actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.lmd-landing-hint {
+  margin: 1.1rem 0 0;
+  color: var(--fg-subtle);
+  font-size: 0.8125rem;
+}
+
+.lmd-landing-trust {
+  margin: 3.5rem 0 0;
+  color: var(--fg-subtle);
+  font-size: 0.78rem;
+  line-height: 1.6;
+}
+
+.lmd-landing-error {
+  margin: 0 0 1.25rem;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--warning-soft);
+  color: var(--warning);
+  font-size: 0.8125rem;
+}
+
+.lmd-paste-input {
+  width: 100%;
+  min-height: 11rem;
+  margin-bottom: 0.75rem;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--bg-raised);
+  color: var(--fg);
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  resize: vertical;
+}
+
+/* ---------- Remote content notice ---------- */
+
+.lmd-notice {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  max-width: var(--prose-measure);
+  margin: 1.5rem auto -1.5rem;
+  padding: 0.6rem 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-surface);
+  font-size: 0.8125rem;
+}
+
+.lmd-notice p {
+  flex: 1;
+  margin: 0;
+  color: var(--fg-muted);
+}
+
+.lmd-notice strong {
+  color: var(--fg);
+  font-weight: 550;
+}
+
+.lmd-notice-dot {
+  flex: none;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: var(--warning);
+}
+
+/* ---------- Drop target ---------- */
+
+.lmd-drop-root {
+  min-height: 100dvh;
+}
+
+.lmd-drop-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--bg) 82%, transparent);
+  backdrop-filter: blur(3px);
+}
+
+.lmd-drop-message {
+  padding: 1rem 2rem;
+  border: 2px dashed var(--accent);
+  border-radius: 10px;
+  color: var(--accent);
+  font-size: 0.95rem;
+  font-weight: 550;
+}
+
+/* ---------- Toast ---------- */
+
+.lmd-toast {
+  position: fixed;
+  bottom: 1.25rem;
+  left: 50%;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  max-width: min(32rem, calc(100vw - 2rem));
+  padding: 0.65rem 0.9rem;
+  transform: translateX(-50%);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-popover);
+  font-size: 0.8125rem;
+}
+
+.lmd-toast-close {
+  flex: none;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  cursor: pointer;
 }

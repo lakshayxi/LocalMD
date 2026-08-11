@@ -1,0 +1,93 @@
+import { useState } from 'react';
+import { createEmptyDocument, createPastedDocument, pickFile } from '@/platform/files';
+import { useDocument } from '../store';
+
+/**
+ * The empty state.
+ *
+ * Deliberately not a marketing page: no hero, no gradient, no feature grid. A
+ * developer who lands here wants their file open in five seconds, and every
+ * element between them and that is a cost.
+ *
+ * The trust line is one sentence and sits below the actions rather than above
+ * them, because it answers a question the reader has *after* deciding to try
+ * this, not before.
+ */
+export function Landing() {
+  const open = useDocument((s) => s.open);
+  const error = useDocument((s) => s.error);
+  const [pasting, setPasting] = useState(false);
+  const [pasted, setPasted] = useState('');
+
+  async function choose() {
+    const source = await pickFile();
+    if (source) await open(source);
+  }
+
+  function submitPaste() {
+    if (!pasted.trim()) return;
+    void open(createPastedDocument(pasted));
+  }
+
+  return (
+    <main className="lmd-landing">
+      <div className="lmd-landing-inner">
+        <h1 className="lmd-landing-title">LocalMD</h1>
+        <p className="lmd-landing-sub">Markdown stays local.</p>
+
+        {error && (
+          <p className="lmd-landing-error" role="alert">
+            {error}
+          </p>
+        )}
+
+        {pasting ? (
+          <div className="lmd-paste">
+            <textarea
+              className="lmd-paste-input"
+              value={pasted}
+              onChange={(event) => setPasted(event.target.value)}
+              placeholder="Paste Markdown here…"
+              aria-label="Markdown to read"
+              autoFocus
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) submitPaste();
+                if (event.key === 'Escape') setPasting(false);
+              }}
+            />
+            <div className="lmd-landing-actions">
+              <button type="button" className="lmd-button is-primary" onClick={submitPaste}>
+                Read it
+              </button>
+              <button type="button" className="lmd-button" onClick={() => setPasting(false)}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="lmd-landing-actions">
+            <button type="button" className="lmd-button is-primary" onClick={() => void choose()}>
+              Open Markdown
+            </button>
+            <button type="button" className="lmd-button" onClick={() => setPasting(true)}>
+              Paste
+            </button>
+            <button
+              type="button"
+              className="lmd-button"
+              onClick={() => void open(createEmptyDocument())}
+            >
+              New
+            </button>
+          </div>
+        )}
+
+        <p className="lmd-landing-hint">or drop a file anywhere on this page</p>
+
+        <p className="lmd-landing-trust">
+          No uploads. No account. Your file is read in this browser and never sent anywhere.
+        </p>
+      </div>
+    </main>
+  );
+}

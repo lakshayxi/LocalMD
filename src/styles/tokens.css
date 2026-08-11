@@ -1,0 +1,93 @@
+/* Design tokens.
+ *
+ * The brief was explicit about what to avoid: gradient heroes, giant rounded
+ * cards, dashboard chrome. The reference points are Preview.app and a native
+ * utility — the document is the interface, and the application should read as
+ * paper and furniture around it.
+ *
+ * So: a warm near-white rather than #fff (pure white reads clinical and glares
+ * on a long read), a neutral dark that is not pure black (true black raises
+ * perceived contrast to the point of haloing on light text), and exactly one
+ * accent, spent on links.
+ */
+
+:root {
+  /* Light — warm paper */
+  --bg: #fcfcfa;
+  --bg-surface: #f4f4f0;
+  --bg-raised: #ffffff;
+  --fg: #1a1a18;
+  --fg-muted: #6e6e68;
+  --fg-subtle: #97978f;
+  --border: #e4e4de;
+  --border-strong: #d2d2ca;
+  --accent: #2a5db0;
+  --accent-soft: #eaf0fb;
+  --warning: #8a5a00;
+  --warning-soft: #fdf3e0;
+
+  --shadow-popover: 0 1px 2px rgb(0 0 0 / 6%), 0 8px 24px rgb(0 0 0 / 8%);
+
+  /* A 16.5px base reads better for long-form than 16 without tipping into
+     "large print". Line height is generous because technical prose is dense. */
+  --prose-size: 1.03rem;
+  --prose-leading: 1.7;
+  --prose-measure: 68ch;
+
+  --ui-size: 0.8125rem;
+
+  --font-prose: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto,
+    'Helvetica Neue', Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', 'JetBrains Mono', Menlo, Consolas,
+    'Liberation Mono', monospace;
+
+  --radius: 5px;
+  --header-height: 40px;
+}
+
+:root[data-theme='dark'],
+html:not([data-theme='light']) {
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+
+    --bg: #17181a;
+    --bg-surface: #1e2023;
+    --bg-raised: #212326;
+    --fg: #e4e4e1;
+    --fg-muted: #9a9a94;
+    --fg-subtle: #6e6e69;
+    --border: #2b2d31;
+    --border-strong: #3a3d42;
+    --accent: #7ea9f0;
+    --accent-soft: #1c2735;
+    --warning: #e0b070;
+    --warning-soft: #2b2417;
+
+    --shadow-popover: 0 1px 2px rgb(0 0 0 / 40%), 0 8px 24px rgb(0 0 0 / 45%);
+  }
+}
+
+/* Explicit override wins over the media query in both directions, so the
+   in-app theme toggle works regardless of the OS setting. */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --bg: #17181a;
+  --bg-surface: #1e2023;
+  --bg-raised: #212326;
+  --fg: #e4e4e1;
+  --fg-muted: #9a9a94;
+  --fg-subtle: #6e6e69;
+  --border: #2b2d31;
+  --border-strong: #3a3d42;
+  --accent: #7ea9f0;
+  --accent-soft: #1c2735;
+  --warning: #e0b070;
+  --warning-soft: #2b2417;
+
+  --shadow-popover: 0 1px 2px rgb(0 0 0 / 40%), 0 8px 24px rgb(0 0 0 / 45%);
+}

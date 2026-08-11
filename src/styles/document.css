@@ -1,0 +1,403 @@
+/* Reading typography.
+ *
+ * This is the product. Everything else is chrome around it.
+ *
+ * Two rules govern the whole file:
+ *
+ * 1. Vertical rhythm comes from margin-top, not margin-bottom. Headings bind
+ *    tightly to the content they introduce and separate generously from what
+ *    came before, which is what makes a document's structure legible while
+ *    scrolling rather than only when read start to finish.
+ *
+ * 2. Prose is constrained to a comfortable measure; tables, code, and diagrams
+ *    are allowed to break out wider. Forcing a wide table into a 68ch column
+ *    to satisfy a rule about line length makes the table unreadable to protect
+ *    the paragraph next to it.
+ */
+
+.lmd-document {
+  max-width: var(--prose-measure);
+  margin: 0 auto;
+  padding: 3.5rem 1.5rem 12rem;
+  font-size: var(--prose-size);
+  line-height: var(--prose-leading);
+  color: var(--fg);
+  /* Long URLs and code identifiers in prose must not force a horizontal
+     scrollbar on the whole page. */
+  overflow-wrap: break-word;
+}
+
+/* Bottom padding above is deliberately deep: it lets the last paragraph scroll
+   up to a comfortable reading position instead of sticking to the bottom edge. */
+
+.lmd-document > :first-child {
+  margin-top: 0;
+}
+
+/* ---------- Headings ---------- */
+
+.lmd-document h1,
+.lmd-document h2,
+.lmd-document h3,
+.lmd-document h4,
+.lmd-document h5,
+.lmd-document h6 {
+  margin: 2.25em 0 0.6em;
+  line-height: 1.28;
+  font-weight: 600;
+  /* Large type needs negative tracking to avoid looking loose; the effect
+     should be invisible, only the absence of it is noticeable. */
+  letter-spacing: -0.014em;
+  scroll-margin-top: calc(var(--header-height) + 1.5rem);
+}
+
+.lmd-document h1 {
+  margin-top: 0;
+  font-size: 1.9em;
+  letter-spacing: -0.022em;
+}
+
+.lmd-document h2 {
+  font-size: 1.42em;
+  letter-spacing: -0.018em;
+  padding-bottom: 0.3em;
+  border-bottom: 1px solid var(--border);
+}
+
+.lmd-document h3 { font-size: 1.18em; }
+.lmd-document h4 { font-size: 1.02em; }
+
+.lmd-document h5,
+.lmd-document h6 {
+  font-size: 0.92em;
+  color: var(--fg-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* rehype-autolink-headings wraps the heading text in an anchor. It must not
+   look like a link — the affordance is the # marker on hover.
+   Selector is scoped to .lmd-document so it outweighs `.lmd-document a`; an
+   unscoped .lmd-heading-anchor loses that specificity fight and every heading
+   in the document renders as a blue underlined link. */
+.lmd-document .lmd-heading-anchor,
+.lmd-document .lmd-heading-anchor:hover {
+  color: inherit;
+  text-decoration: none;
+}
+
+.lmd-document :is(h1, h2, h3, h4, h5, h6) .lmd-heading-anchor::after {
+  content: '#';
+  margin-left: 0.4em;
+  color: var(--fg-subtle);
+  font-weight: 400;
+  opacity: 0;
+  transition: opacity 100ms ease;
+}
+
+.lmd-document :is(h1, h2, h3, h4, h5, h6):hover .lmd-heading-anchor::after,
+.lmd-heading-anchor:focus-visible::after {
+  opacity: 1;
+}
+
+/* ---------- Body copy ---------- */
+
+.lmd-document p {
+  margin: 1.1em 0 0;
+}
+
+.lmd-document a {
+  color: var(--accent);
+  text-decoration: underline;
+  /* Underlines that clear descenders read as typography rather than as markup. */
+  text-underline-offset: 0.18em;
+  text-decoration-thickness: 0.06em;
+}
+
+.lmd-document a:hover {
+  text-decoration-thickness: 0.12em;
+}
+
+.lmd-document strong { font-weight: 650; }
+.lmd-document em { font-style: italic; }
+
+.lmd-document del {
+  color: var(--fg-muted);
+}
+
+.lmd-document mark {
+  background: var(--accent-soft);
+  color: inherit;
+  padding: 0.1em 0.2em;
+  border-radius: 3px;
+}
+
+.lmd-document kbd {
+  display: inline-block;
+  padding: 0.12em 0.42em;
+  border: 1px solid var(--border-strong);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  background: var(--bg-surface);
+  font-family: var(--font-mono);
+  font-size: 0.82em;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+.lmd-document abbr {
+  text-decoration: underline dotted;
+  cursor: help;
+}
+
+.lmd-document hr {
+  margin: 3em 0;
+  border: 0;
+  border-top: 1px solid var(--border);
+}
+
+/* ---------- Lists ---------- */
+
+.lmd-document ul,
+.lmd-document ol {
+  margin: 1.1em 0 0;
+  padding-left: 1.6em;
+}
+
+.lmd-document li {
+  margin: 0.35em 0;
+}
+
+/* Nested lists tighten up: the indent already signals the relationship, so the
+   extra vertical space just fragments the block. */
+.lmd-document li > ul,
+.lmd-document li > ol {
+  margin-top: 0.35em;
+}
+
+.lmd-document li > p {
+  margin-top: 0.6em;
+}
+
+.lmd-document dl { margin: 1.1em 0 0; }
+.lmd-document dt { font-weight: 600; margin-top: 0.8em; }
+.lmd-document dd { margin: 0.2em 0 0 1.4em; color: var(--fg-muted); }
+
+/* ---------- Task lists ---------- */
+
+.lmd-document li:has(> .lmd-task-checkbox) {
+  list-style: none;
+  margin-left: -1.45em;
+  padding-left: 1.45em;
+}
+
+/* Drawn rather than an <input>: the pipeline converts GFM's checkbox into an
+   inert span so no form control ever reaches the document. See
+   src/core/markdown/plugins/task-lists.ts */
+.lmd-task-checkbox {
+  display: inline-block;
+  width: 0.92em;
+  height: 0.92em;
+  margin-right: 0.5em;
+  vertical-align: -0.08em;
+  border: 1.5px solid var(--border-strong);
+  border-radius: 3.5px;
+  background: var(--bg-raised);
+}
+
+.lmd-task-checkbox[aria-checked='true'] {
+  border-color: var(--accent);
+  background: var(--accent);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 6.2l2.4 2.4 4.6-5' fill='none' stroke='%23fff' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-size: 100%;
+}
+
+/* ---------- Code ---------- */
+
+.lmd-document code {
+  font-family: var(--font-mono);
+  /* Mono faces run optically larger than the prose face at the same size. */
+  font-size: 0.875em;
+  font-variant-ligatures: none;
+}
+
+.lmd-document :not(pre) > code {
+  padding: 0.14em 0.36em;
+  border-radius: 4px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.lmd-code-block {
+  margin: 1.35em 0 0;
+}
+
+.lmd-document pre {
+  margin: 0;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-surface);
+  overflow-x: auto;
+  line-height: 1.6;
+  /* Code blocks may exceed the prose measure — that is the point of the
+     breakout. Tabs default to 8, which wastes the width. */
+  tab-size: 2;
+}
+
+.lmd-document pre code {
+  padding: 0;
+  border: 0;
+  background: none;
+  white-space: pre;
+  font-size: 0.855em;
+}
+
+/* ---------- Blockquotes ---------- */
+
+.lmd-document blockquote {
+  margin: 1.35em 0 0;
+  padding: 0.1em 0 0.1em 1.1em;
+  border-left: 3px solid var(--border-strong);
+  color: var(--fg-muted);
+}
+
+.lmd-document blockquote > :first-child {
+  margin-top: 0;
+}
+
+/* ---------- Tables ---------- */
+
+.lmd-table-scroll {
+  margin: 1.35em 0 0;
+  overflow-x: auto;
+  /* Wide tables break out of the prose measure rather than compressing. */
+  max-width: 100%;
+}
+
+.lmd-table-scroll:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius);
+}
+
+.lmd-document table {
+  border-collapse: collapse;
+  font-size: 0.94em;
+  /* Not width:100% — a two-column table stretched across the full measure has
+     unreadably distant columns. */
+  min-width: min(100%, 28rem);
+}
+
+.lmd-document th,
+.lmd-document td {
+  padding: 0.45em 0.85em;
+  border: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.lmd-document th {
+  background: var(--bg-surface);
+  font-weight: 600;
+}
+
+.lmd-document td > code {
+  white-space: pre;
+}
+
+/* ---------- Images and withheld resources ---------- */
+
+.lmd-document img {
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--radius);
+}
+
+/* Placeholders must read as deliberate, never as a failure. A broken-image
+   glyph tells the reader the app is broken; a labelled chip tells them a
+   decision was made on their behalf and can be reversed. */
+.lmd-blocked-image,
+.lmd-unresolved-image {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+  max-width: 100%;
+  padding: 0.2em 0.55em;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--bg-surface);
+  color: var(--fg-muted);
+  font-size: 0.86em;
+  line-height: 1.5;
+  vertical-align: middle;
+}
+
+.lmd-blocked-image::before {
+  content: '';
+  flex: none;
+  width: 0.75em;
+  height: 0.75em;
+  border-radius: 50%;
+  background: var(--warning);
+}
+
+.lmd-unresolved-image::before {
+  content: '';
+  flex: none;
+  width: 0.75em;
+  height: 0.75em;
+  border-radius: 50%;
+  border: 1.5px dashed var(--fg-subtle);
+}
+
+/* ---------- Footnotes ---------- */
+
+.lmd-document .footnotes {
+  margin-top: 3.5em;
+  padding-top: 1.2em;
+  border-top: 1px solid var(--border);
+  font-size: 0.92em;
+  color: var(--fg-muted);
+}
+
+.lmd-document .footnotes h2 {
+  font-size: 0.86em;
+  border: 0;
+  padding: 0;
+  margin: 0 0 0.4em;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--fg-subtle);
+}
+
+.lmd-document sup a {
+  text-decoration: none;
+  padding: 0 0.1em;
+}
+
+/* ---------- Disclosure ---------- */
+
+.lmd-document details {
+  margin: 1.35em 0 0;
+  padding: 0.7em 1em;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-surface);
+}
+
+.lmd-document summary {
+  cursor: pointer;
+  font-weight: 550;
+}
+
+.lmd-document details[open] > summary {
+  margin-bottom: 0.6em;
+  padding-bottom: 0.6em;
+  border-bottom: 1px solid var(--border);
+}
+
+.lmd-document details > :last-child {
+  margin-bottom: 0;
+}

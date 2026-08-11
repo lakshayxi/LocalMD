@@ -34,6 +34,20 @@ const ALLOWED = [
     prefix: 'https://react.dev/errors/',
     why: 'React embeds a docs link in minified error text. Rendered as a string, never fetched.',
   },
+  {
+    prefix: 'https://github.com/syntax-tree/',
+    why: 'hast-util-to-jsx-runtime embeds docs links in error messages. Strings, never fetched.',
+  },
+  {
+    prefix: 'http://www.ibm.com/data/dtd/',
+    why: 'A public DTD identifier in parse5\'s doctype table. An identifier, not a fetch target.',
+  },
+  {
+    prefix: 'https://localmd.invalid',
+    why:
+      'Ours. Used as the base URL for parsing image hosts in core/markdown/plugins/images.ts. ' +
+      '.invalid is reserved by RFC 2606 and can never resolve, which is why it was chosen.',
+  },
 ];
 
 /** URLs the document itself may reference at runtime are NOT covered here —
