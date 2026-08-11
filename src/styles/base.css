@@ -416,9 +416,8 @@ body {
   text-align: left;
 }
 
-/* --fg-muted throughout this panel, not the --fg-subtle its siblings use.
-   Subtle is calibrated against --bg, where it clears AA at 4.59:1; on this
-   panel's --bg-surface the same colour is 4.27:1, which small text fails. */
+/* --fg-muted throughout, because this panel has its own --bg-surface behind it
+   and --fg-subtle only clears AA against --bg. See the table in tokens.css. */
 .lmd-recovery-heading {
   margin: 0 0 0.5rem;
   color: var(--fg-muted);
@@ -542,9 +541,14 @@ body {
   white-space: nowrap;
 }
 
+/* --fg-muted, though at rest this sits on --bg where --fg-subtle would pass:
+   the row paints itself --bg-surface on hover, and --fg-subtle fails there.
+   Unconditional rather than scoped to :hover — the hovered background is not
+   the only one a row can end up on, and text that shifts colour under the
+   cursor adds a second signal to one the background already gives. */
 .lmd-recents-meta {
   flex: none;
-  color: var(--fg-subtle);
+  color: var(--fg-muted);
   font-size: 0.75rem;
 }
 
@@ -715,8 +719,12 @@ body {
   font-size: 0.9rem;
 }
 
+/* Every --fg-muted below is for the same reason: the palette floats on
+   --bg-raised, where --fg-subtle is 4.71:1 in light but 4.08:1 in dark. The
+   hint has a second background besides — the selected option's --accent-soft,
+   where --fg-subtle fails in both themes at 4.12:1 and 3.91:1. See tokens.css. */
 .lmd-palette-input::placeholder {
-  color: var(--fg-subtle);
+  color: var(--fg-muted);
 }
 
 /* The input is the only focusable thing in here; a ring around a field that
@@ -740,7 +748,7 @@ body {
 
 .lmd-palette-group {
   padding: 0.5rem 0.6rem 0.25rem;
-  color: var(--fg-subtle);
+  color: var(--fg-muted);
   font-size: 0.68rem;
   font-weight: 550;
   letter-spacing: 0.06em;
@@ -770,14 +778,14 @@ body {
 
 .lmd-palette-hint {
   flex: none;
-  color: var(--fg-subtle);
+  color: var(--fg-muted);
   font-size: 0.75rem;
 }
 
 .lmd-palette-empty {
   margin: 0;
   padding: 1.25rem 0.6rem;
-  color: var(--fg-subtle);
+  color: var(--fg-muted);
   font-size: 0.85rem;
   text-align: center;
 }

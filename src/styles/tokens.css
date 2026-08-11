@@ -18,20 +18,32 @@
   --bg-raised: #ffffff;
   --fg: #1a1a18;
   --fg-muted: #5f5f59;
-  /* The AA floor, and the reason it is not lighter. Every use of this token —
-     the alpha chip, landing hints, recents timestamps, outline and palette
-     group labels — is small text, so it needs 4.5:1.
+  /* The AA floor, and the reason it is not lighter. Every use of this token is
+     small text, so it needs 4.5:1 — and it only has that against one background.
 
-     Calibrated against --bg, where it sits at 4.59:1 (dark: 4.60:1). Anything
-     lighter fails, and the axe pass in e2e/a11y.spec.ts will say so.
+     **--fg-subtle is for text on --bg. Text on a panel takes --fg-muted.**
+     That is the whole rule. Measured, light / dark:
 
-     **Against --bg-surface it does not clear the floor**: 4.27:1 light, 4.23:1
-     dark. Small text on a surface panel uses --fg-muted instead — see
-     .lmd-recovery. This was measured, not assumed, and the note is here because
-     the two backgrounds are close enough to look interchangeable and are not.
+                       --fg-subtle      --fg-muted
+       --bg            4.59 / 4.60      6.26 / 6.28
+       --bg-surface    4.27 / 4.22 ✗    5.83 / 5.77
+       --bg-raised     4.71 / 4.08 ✗    6.43 / 5.57
+       --accent-soft   4.12 / 3.91 ✗    5.62 / 5.34
 
-     --fg-muted stays a clear step darker so the three-level scale survives the
-     constraint. */
+     The failures are easy to introduce because the backgrounds are within a
+     few percent of each other and read as the same colour, and because two of
+     them fail in only one theme — --bg-raised passes in light and fails in
+     dark, which is exactly the shape a single-theme axe run cannot see. Every
+     scan in e2e/a11y.spec.ts runs both themes for that reason.
+
+     A state counts as a background: a row that paints itself --bg-surface on
+     hover has moved its text to a failing pair for as long as the cursor is
+     there. Fix those by changing the colour outright rather than under the
+     state selector — see .lmd-recents-meta.
+
+     Do not close the gap by darkening --fg-subtle: clearing 4.5:1 on
+     --accent-soft would drag it onto --fg-muted and collapse the three-level
+     scale this file exists to keep. */
   --fg-subtle: #74746c;
   --border: #e4e4de;
   --border-strong: #d2d2ca;
