@@ -154,7 +154,17 @@ await page.getByRole('article').waitFor();
 await page.waitForLoadState('networkidle');
 
 record('renders a document', await page.getByRole('heading', { name: 'Live check' }).isVisible());
-record('highlighting works on the live build', (await page.locator('pre.shiki').count()) > 0);
+
+// Highlighting is applied after the first paint, deliberately — the document is
+// readable before Shiki has loaded its grammar. So this waits rather than
+// counting: an immediate count asserts the scheduling, not the outcome. The
+// wait is bounded, so a build where highlighting never arrives still fails.
+const highlighted = await page
+  .locator('pre.shiki')
+  .first()
+  .waitFor({ timeout: 15_000 })
+  .then(() => true, () => false);
+record('highlighting works on the live build', highlighted);
 record(
   'opening a document with remote images contacts nobody',
   crossOrigin.length === 0,
