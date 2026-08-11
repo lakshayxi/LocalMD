@@ -11,6 +11,11 @@ built 250KB document and a built 1MB torture document (200 code blocks, 30
 Mermaid diagrams, 100 formulas). Deterministic, so these numbers are comparable
 to the next ones.
 
+The perf project runs with one worker. The three rows must not compete with one
+another: doing so makes the small document share a CPU with the 1MB parse and
+measures Playwright scheduling rather than a foreground LocalMD page. Strict
+mode also disables retries, so the first reading is the release evidence.
+
 Every measurement is **warm**: a small document containing a fence and a formula
 is opened first, so no chunk downloads inside the measured window. Download and
 boot are a different budget, asserted by `scripts/assert-bundle-budget.mjs`.
@@ -24,6 +29,10 @@ boot are a different budget, asserted by `scripts/assert-bundle-budget.mjs`.
 | 1MB, usable | < 2500ms | 2400ms ✓ | **1790ms** ✓ |
 | 1MB, no main-thread task | > 50ms is a failure | **1431ms** ✗ | **none** ✓ |
 | 1MB, memory | < 250MB | 11MB ✓ | 10MB ✓ |
+
+Re-run on 2026-08-12 after making the harness serial: **104ms**, **438ms**, and
+**1877ms** respectively; no task over 50ms, 10MB heap. All three strict rows
+passed on their first attempt.
 
 "None" is literal: over the render plus a three-second settle window, the
 browser recorded no `longtask` entry at all, and a `longtask` entry exists only

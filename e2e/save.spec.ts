@@ -9,9 +9,10 @@ import { expect, test, type Page } from '@playwright/test';
  * covers Safari and Firefox, where download *is* saving.
  *
  * Save-in-place cannot be driven — the File System Access picker is native
- * chrome — so its adapter is covered by unit tests against fake handles in
- * test/files/save.test.ts, and manual verification on Chrome and Edge stays on
- * the release checklist. Stated rather than papered over.
+ * chrome. The picker UI stays outside Playwright's reach, but Chromium's OPFS
+ * returns a real FileSystemFileHandle with the same write and identity surface.
+ * The Save As wiring below uses one of those handles end to end; the adapter's
+ * byte-level edge cases remain covered in test/files/save.test.ts.
  */
 
 const MOD = process.platform === 'darwin' ? 'Meta' : 'Control';
@@ -135,6 +136,86 @@ test.describe('download fallback', () => {
     await download;
 
     await expect(page.getByTitle('Unsaved changes')).toHaveCount(0);
+  });
+});
+
+test.describe('save as with a real browser handle', () => {
+  test.skip(
+    ({ browserName }) => browserName !== 'chromium',
+    'OPFS FileSystemFileHandle coverage is Chromium-only',
+  );
+
+  test('adopts the chosen file, then saves subsequent edits back to it', async ({ page }) => {
+    const targetName = 'save-as-target.md';
+
+    // Replace only the browser-owned picker UI. The handle itself is real: it
+    // comes from Chromium's origin-private filesystem, survives structured
+    // clone, and exercises createWritable/getFile/isSameEntry rather than a
+    // test double. This covers the application seam the native dialog hides.
+    await page.addInitScript((name) => {
+      Object.defineProperty(window, 'showSaveFilePicker', {
+        configurable: true,
+        value: async () => {
+          const count = Number(sessionStorage.getItem('localmd-test-save-picker-calls') ?? '0');
+          sessionStorage.setItem('localmd-test-save-picker-calls', String(count + 1));
+          const root = await navigator.storage.getDirectory();
+          return root.getFileHandle(name, { create: true });
+        },
+      });
+    }, targetName);
+    await page.reload();
+    await expect(page.getByRole('button', { name: 'Open Markdown' })).toBeVisible();
+
+    await page.evaluate(async (name) => {
+      const directory = await navigator.storage.getDirectory();
+      await directory.removeEntry(name).catch(() => undefined);
+    }, targetName);
+
+    await openPasted(page);
+    await page.getByRole('button', { name: 'Edit', exact: true }).click();
+    await page.locator('.cm-content').click();
+    await page.keyboard.press(`${MOD}+a`);
+    await page.keyboard.press('ArrowRight');
+    await page.keyboard.type('\nFirst saved version.\n');
+
+    await page.keyboard.press(`${MOD}+k`);
+    await page.getByRole('option', { name: /Save as/ }).click();
+    await expect(page.getByRole('status')).toContainText(`Saved ${targetName}`);
+    await expect(page.getByText(targetName, { exact: true })).toBeVisible();
+
+    const firstWrite = await page.evaluate(async (name) => {
+      const directory = await navigator.storage.getDirectory();
+      return (await (await directory.getFileHandle(name)).getFile()).text();
+    }, targetName);
+    expect(firstWrite).toContain('First saved version.');
+
+    // Save As must re-point the open document. A later ⌘S should write to
+    // the adopted handle without opening the picker again or touching the old
+    // in-memory source.
+    await page.locator('.cm-content').click();
+    await page.keyboard.press(`${MOD}+a`);
+    await page.keyboard.press('ArrowRight');
+    await page.keyboard.type('Second saved version.\n');
+    await page.keyboard.press(`${MOD}+s`);
+    await expect(page.getByRole('status')).toContainText(`Saved ${targetName}`);
+
+    const result = await page.evaluate(async (name) => {
+      const directory = await navigator.storage.getDirectory();
+      const text = await (await (await directory.getFileHandle(name)).getFile()).text();
+      return {
+        text,
+        pickerCalls: Number(sessionStorage.getItem('localmd-test-save-picker-calls')),
+      };
+    }, targetName);
+
+    expect(result.text).toContain('First saved version.');
+    expect(result.text).toContain('Second saved version.');
+    expect(result.pickerCalls).toBe(1);
+
+    await page.evaluate(async (name) => {
+      const directory = await navigator.storage.getDirectory();
+      await directory.removeEntry(name);
+    }, targetName);
   });
 });
 

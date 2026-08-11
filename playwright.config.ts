@@ -34,10 +34,15 @@ export default defineConfig({
       name: 'perf',
       testMatch: PERF,
       use: { ...devices['Desktop Chrome'] },
+      // A performance gate measures one foreground page at a time. Running the
+      // three corpus sizes in parallel makes the 45KB row compete with the 1MB
+      // parse, which measures the test runner's scheduling rather than LocalMD.
+      fullyParallel: false,
       // Timing on a shared runner is noisy in one direction only: a retry that
       // passes means the budget is met and the machine hiccuped, which is worth
-      // more than a red build nobody trusts.
-      retries: 2,
+      // more than a red build nobody trusts. A strict release sign-off gets no
+      // retry: the first reading is the evidence being recorded.
+      retries: process.env.PERF_STRICT === '1' ? 0 : 2,
     },
   ],
 

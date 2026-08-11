@@ -1,10 +1,16 @@
 # Gate B — the manual checklist
 
-Everything here needs a **real `FileSystemFileHandle`, minted by the native file
-picker**, which no test can produce: Playwright cannot drive OS chrome, and a
-stand-in handle loses its methods to structured clone. These checks have been
-referred to from source comments since M1 without ever being written down in one
-place. This is that place.
+This checklist separates the browser-owned picker UI from LocalMD's behaviour
+after a handle is returned. Playwright cannot drive OS chrome, but Chromium's
+origin-private filesystem can return a **real `FileSystemFileHandle`** with the
+same write, clone, and identity surface. `e2e/save.spec.ts` now uses that to
+prove that Save As adopts the chosen file and that the next ⌘S writes to it.
+Byte-level edge cases stay in `test/files/save.test.ts`.
+
+What remains genuinely manual is the vendor UI: whether Chrome and Edge show
+the expected permission prompt, return the file the reader picked, and retain
+that grant as expected. The application paths downstream of that prompt no
+longer depend on a stand-in object.
 
 Run the whole list on **Chrome** and again on **Edge**. Both are Chromium, and
 that is the point: the File System Access implementations are close enough that
@@ -14,6 +20,29 @@ that only doing one is not doing the check.
 Firefox and Safari have no handles for user files at all. Their equivalent —
 that saving degrades to a download rather than failing — is covered end to end
 in `e2e/save.spec.ts` and needs nothing by hand.
+
+## Evidence recorded on 2026-08-12
+
+The Codex in-app Chromium browser opened the picker-selected
+`Pasted document.md` handle and verified these paths against the production
+build on macOS 26.5.2:
+
+- Save wrote an edit in place; the toast named the file and the bytes changed
+  on disk.
+- The recent entry survived and reopened the same handle.
+- Opening the handle in three tabs produced `Open in 3 tabs`.
+- A save from another tab made a stale ⌘S refuse the write. The three-answer
+  conflict panel appeared and the newer disk contents survived unchanged.
+- A dirty real-file draft survived a closed tab. Restore returned to Edit and
+  carried the conflict forward because the disk version no longer matched.
+- The 8KB `Sage.md` supplied for the run rendered from its exact text without a
+  crash. Its relative image was withheld, correctly, because paste supplies no
+  folder handle.
+
+The same run added and passed the OPFS-backed Save As regression: the header
+adopts the chosen filename, a second edit goes to the new handle, and the picker
+is called exactly once. The full suite finished with 215 unit tests and 285
+Playwright tests passing (27 intentional skips).
 
 ## Before you start
 
@@ -144,14 +173,15 @@ never seen the app, with a stopwatch, and write down the number.
 
 ## Results
 
-| Check | Chrome | Edge | Notes |
-|---|---|---|---|
-| 1. Save in place, round-trip fidelity | | | |
-| 2. Save As identity change | | | |
-| 3. Conflict banner in situ | | | |
-| 4. Recents identity | | | |
-| 5. Draft recovery against a real file | | | |
-| 6. Multi-tab warning | | | |
-| 7. First run under ten seconds | | | |
+| Check | Codex in-app / automated | Chrome UI | Edge UI | Notes |
+|---|---|---|---|---|
+| 1. Save in place, round-trip fidelity | Partial pass | Not run | Not installed | Picker handle save passed; LF bytes checked on disk. CRLF/BOM/no-final-newline are automated, not picker-UI runs. |
+| 2. Save As identity change | Pass | Not run | Not installed | Real OPFS handle; header changed and the next save reused it. |
+| 3. Conflict banner in situ | Pass | Not run | Not installed | Real picker handle, dirty conflict, three choices, and no stale overwrite. Older-mtime refusal is unit-covered. |
+| 4. Recents identity | Partial pass | Not run | Not installed | Real handle survived and reopened; same-name/different-file and dead-row cases remain automated. |
+| 5. Draft recovery against a real file | Pass | Not run | Not installed | Idle draft restored to Edit with the expected mismatch conflict. |
+| 6. Multi-tab warning | Pass | Not run | Not installed | Same picker handle reached three tabs; second save was refused. Identity and expiry cases remain automated. |
+| 7. First run under ten seconds | Informal pass | Not run | Not installed | `Sage.md` went from paste to rendered document in under two seconds of browser-tool time; not a clean-profile stopwatch run. |
 
-Browser versions, OS, and date:
+Browser versions, OS, and date: Codex in-app Chromium (version not exposed),
+macOS 26.5.2, 2026-08-12. Microsoft Edge is not installed on this machine.

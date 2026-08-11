@@ -5,20 +5,42 @@
 A browser-based Markdown reader — with editing when you need it — that never
 sends your document anywhere. No uploads, no accounts, no document backend.
 
-**Try it: <https://localmd-12t.pages.dev>**
+**Hosted alpha: <https://localmd-12t.pages.dev>**
 
-> **Status: public alpha (M2).** Open a Markdown file — by drop, picker, or
-> paste — and read it. CommonMark and GFM with heading anchors, task lists,
-> footnotes, and tables; syntax highlighting, math, and Mermaid diagrams; light
-> and dark themes; sans and serif reading faces; and a print stylesheet.
+> **Status: M4 launch candidate.** `main` now includes reading, editing, Split,
+> save-in-place where the browser permits it, download fallback everywhere
+> else, draft recovery, external-change protection, recents, and multi-tab
+> warnings. The hosted URL is still the quiet public alpha and may lag `main`
+> until the next deliberate production deploy.
 >
-> This is an early build shared for feedback, not a launch. Editing and saving
-> arrive in M4. [Tell us what's broken](https://github.com/lakshayxi/LocalMD/issues).
+> This remains an early build shared for feedback.
+> [Tell us what's broken](https://github.com/lakshayxi/LocalMD/issues).
 
 The privacy claim is verified against the live deployment on every release —
 see [reports/gate-a-production.md](reports/gate-a-production.md) for the
 response headers as actually served, and `scripts/verify-production.mjs` to
 re-run the checks yourself.
+
+## What it does
+
+- Opens Markdown by picker, drop, paste, recent file, or a new blank document.
+- Renders CommonMark and GFM, heading links, tables, task lists, footnotes,
+  syntax-highlighted code, KaTeX math, and Mermaid diagrams.
+- Switches between Read, Edit, and Split without losing the editor state.
+- Saves back to picker-opened files in browsers with the File System Access
+  API; other browsers download the same bytes with a Markdown filename.
+- Preserves LF or CRLF, a UTF-8 BOM, and the presence or absence of the final
+  newline across edits and saves.
+- Keeps bounded, local drafts and offers recovery after an interrupted session.
+- Refuses to silently overwrite a file that changed on disk and warns when the
+  same file is open in several LocalMD tabs.
+- Provides a command palette, keyboard shortcuts, a wide-screen outline,
+  deep links, reading preferences, and print styles.
+
+| Browser path | Save behaviour |
+| --- | --- |
+| Chrome and Edge desktop | Save in place after permission; Save As adopts the new file |
+| Firefox and Safari | Download fallback; the UI calls it **Download** |
 
 ## A note on math delimiters
 
@@ -74,6 +96,22 @@ Three honest caveats:
   IndexedDB, readable by anything with access to your browser profile.
 
 No analytics. No error reporting. No CDN. No third-party runtime dependencies.
+
+## Performance
+
+The release corpus is rendered from the production build in Chromium. On the
+recorded Apple M4 / 16GB sign-off machine, the latest strict run measured:
+
+| Document | Result | Budget |
+| --- | ---: | ---: |
+| 45KB real README | 104ms | <150ms |
+| 250KB corpus | 438ms | <600ms |
+| 1MB torture document | 1877ms, no task over 50ms | <2500ms, no task over 50ms |
+
+Run `PERF_STRICT=1 npm run perf` for the release thresholds. CI uses a looser
+regression ceiling because shared-runner load is not a stable benchmark. The
+corpus, method, tradeoffs, and machine details are in
+[`reports/gate-b-performance.md`](reports/gate-b-performance.md).
 
 ## Development
 
@@ -132,6 +170,13 @@ Beyond the usual, three suites carry unusual weight:
 - **[`scripts/assert-no-external-urls.mjs`](scripts/assert-no-external-urls.mjs)**
   — fails the build if any third-party URL reaches `dist/`, catching transitive
   additions a `package.json` review would miss.
+- **[`e2e/save.spec.ts`](e2e/save.spec.ts)** — proves the download bytes on
+  Firefox and WebKit and uses a real Chromium OPFS handle to prove that Save As
+  adopts its new file before the next save.
+
+The release-specific evidence lives in
+[`reports/gate-b-manual-checklist.md`](reports/gate-b-manual-checklist.md) and
+[`reports/gate-b-performance.md`](reports/gate-b-performance.md).
 
 ## License
 
