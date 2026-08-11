@@ -1,0 +1,67 @@
+/* Minimal reset + tokens. The real typography system is M1 — this is only
+   enough to make the M0 shell legible and to prove the CSS pipeline works. */
+
+:root {
+  --bg: #ffffff;
+  --fg: #1a1a1a;
+  --fg-muted: #6a6a6a;
+
+  --font-prose: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #16171a;
+    --fg: #e8e8e8;
+    --fg-muted: #9a9a9a;
+  }
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  color-scheme: light dark;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-prose);
+  -webkit-font-smoothing: antialiased;
+}
+
+.boot {
+  display: grid;
+  place-content: center;
+  gap: 0.25rem;
+  min-height: 100dvh;
+  text-align: center;
+}
+
+.boot h1 {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.boot p {
+  margin: 0;
+  color: var(--fg-muted);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
