@@ -172,6 +172,14 @@ export function PrivacyPage({ onClose }: { onClose: () => void }) {
           disk after the draft was written, LocalMD tells you before you can save over it.
         </p>
         <p>
+          One more thing moves, and it is not storage. If you have the same file open in more than
+          one LocalMD tab, those tabs tell each other so, over a channel inside your browser that
+          only this site can hear. It carries the same kind of file reference the recents list holds
+          and a random id for the tab — never your text, and never anything about what the file
+          contains. It is not written down anywhere and it never touches the network. It exists so
+          that the second tab to save is not where you find out the file was open twice.
+        </p>
+        <p>
           Anything with access to your browser profile can read all of it. LocalMD does not add
           encryption on top, and you should not treat browser storage as a safe. You can erase all
           of it at any time:

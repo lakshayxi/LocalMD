@@ -12,6 +12,7 @@ import { useDocument } from './store';
 import { useNavigationGuard } from './use-navigation-guard';
 import { usePrintPreparation } from './use-print-preparation';
 import { useExternalChange } from './use-external-change';
+import { usePeerTabs } from './use-peer-tabs';
 import { useRoute } from './use-route';
 import { useShortcuts } from './use-shortcuts';
 import { useSplitAvailable } from './use-media-query';
@@ -31,6 +32,10 @@ export function App() {
   usePrintPreparation();
   useNavigationGuard();
   useExternalChange();
+  // Owned here rather than in the Header, which unmounts on a route change: the
+  // channel would then post a farewell and rejoin under a new identity every
+  // time somebody looked at the privacy page.
+  const peerTabs = usePeerTabs();
 
   // Preferences were already applied to <html> by public/theme-init.js before
   // first paint; this reads them into React state and loads the recents list.
@@ -97,7 +102,7 @@ export function App() {
   if (route === 'privacy') {
     return (
       <>
-        <Header onOpenPrivacy={() => navigate('privacy')} />
+        <Header onOpenPrivacy={() => navigate('privacy')} peerTabs={peerTabs} />
         <PrivacyPage onClose={() => navigate('document')} />
         {palette}
         <Toast />
@@ -107,7 +112,7 @@ export function App() {
 
   return (
     <DropTarget>
-      <Header onOpenPrivacy={() => navigate('privacy')} />
+      <Header onOpenPrivacy={() => navigate('privacy')} peerTabs={peerTabs} />
       {/* Above the workspace rather than inside it, so it is present in Read,
           Edit and Split alike. A conflict is a fact about the document, not
           about the mode someone happens to be looking at it in. */}

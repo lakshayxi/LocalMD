@@ -17,7 +17,14 @@ import { TypefaceToggle } from './TypefaceToggle';
  * space from the document on every screen — but a reader who hits a rough edge
  * should never have to wonder whether it is meant to be like that.
  */
-export function Header({ onOpenPrivacy }: { onOpenPrivacy: () => void }) {
+export function Header({
+  onOpenPrivacy,
+  peerTabs,
+}: {
+  onOpenPrivacy: () => void;
+  /** Other tabs of this browser with the same file open. See use-peer-tabs.ts. */
+  peerTabs: number;
+}) {
   const source = useDocument((s) => s.source);
   const rendered = useDocument((s) => s.rendered);
   const allowRemote = useDocument((s) => s.allowRemoteContent);
@@ -73,6 +80,24 @@ export function Header({ onOpenPrivacy }: { onOpenPrivacy: () => void }) {
             }
           >
             {allowRemote ? 'Remote content on' : 'Local'}
+          </span>
+        )}
+        {/* Beside the privacy pill because they are the same kind of thing: a
+            standing fact about this session, true until it stops being true.
+            Not a banner — the file is not in trouble, and a bar across the top
+            for something the reader may well have done on purpose would teach
+            them to ignore the bar that means something. `role="status"`, the
+            polite counterpart of the conflict banner's alert: worth saying,
+            never worth interrupting for. */}
+        {source && peerTabs > 0 && (
+          <span
+            className="lmd-tabs"
+            role="status"
+            title="Another LocalMD tab has this file open. Nothing is locked — but whichever tab saves second will be told the file changed on disk."
+          >
+            {/* The total, not the count of others: "2 tabs" is what the reader
+                can go and look at. Always plural, since one tab is no news. */}
+            Open in {peerTabs + 1} tabs
           </span>
         )}
         <TypefaceToggle />
