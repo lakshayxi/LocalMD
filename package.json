@@ -13,6 +13,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "e2e": "playwright test",
+    "perf": "playwright test --project=perf",
     "assert:no-external": "node scripts/assert-no-external-urls.mjs"
   },
   "dependencies": {

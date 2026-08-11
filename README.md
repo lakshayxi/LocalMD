@@ -88,6 +88,7 @@ npm run dev
 | `npm run build` | Typecheck, build, assert no third-party URLs reached `dist/` |
 | `npm test` | Unit tests (Vitest) |
 | `npm run e2e` | E2E across Chromium, Firefox, WebKit against a production build |
+| `npm run perf` | §16 render budgets on the committed corpus. `PERF_STRICT=1` asserts the targets themselves |
 | `npm run lint` | ESLint, including module boundary enforcement |
 | `npm run typecheck` | TypeScript project references |
 

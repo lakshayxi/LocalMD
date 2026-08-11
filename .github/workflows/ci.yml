@@ -39,6 +39,31 @@ jobs:
       - name: Enforce bundle size budget
         run: node scripts/assert-bundle-budget.mjs
 
+  perf:
+    name: Performance budgets
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      # Deliberately not PERF_STRICT. Every run prints each measurement against
+      # its §16 target and says whether it is met, so the gap is in the log of
+      # every build; what is *asserted* here is a ceiling sized for a shared
+      # runner, because a budget that goes red when the machine is busy is a
+      # budget somebody mutes. The release gate runs `PERF_STRICT=1
+      # npx playwright test --project=perf` on a chosen machine.
+      - run: npx playwright test --project=perf
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: playwright-report-perf
+          path: playwright-report/
+          retention-days: 7
+
   e2e:
     name: E2E (${{ matrix.browser }})
     runs-on: ubuntu-latest

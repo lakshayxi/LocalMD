@@ -3,6 +3,9 @@ import { defineConfig, devices } from '@playwright/test';
 const PORT = 4173;
 export const BASE_URL = `http://localhost:${PORT}`;
 
+/** The perf spec runs in one project of its own, never in the browser matrix. */
+const PERF = /perf\.spec\.ts/;
+
 export default defineConfig({
   testDir: './e2e',
   fullyParallel: true,
@@ -19,9 +22,23 @@ export default defineConfig({
   // The Tier 1/2 matrix from the plan. Tier 3 (mobile) is view-only and gets
   // added when there is a document surface to view.
   projects: [
-    { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
-    { name: 'firefox', use: { ...devices['Desktop Firefox'] } },
-    { name: 'webkit', use: { ...devices['Desktop Safari'] } },
+    { name: 'chromium', use: { ...devices['Desktop Chrome'] }, testIgnore: PERF },
+    { name: 'firefox', use: { ...devices['Desktop Firefox'] }, testIgnore: PERF },
+    { name: 'webkit', use: { ...devices['Desktop Safari'] }, testIgnore: PERF },
+
+    // Its own project, and Chromium only. The §16 budgets are render numbers:
+    // they are not comparable between engines, three sets of them would be
+    // three sets of flakes, and the code they protect — the pipeline and the
+    // React commit — is the same everywhere. Run with `--project=perf`.
+    {
+      name: 'perf',
+      testMatch: PERF,
+      use: { ...devices['Desktop Chrome'] },
+      // Timing on a shared runner is noisy in one direction only: a retry that
+      // passes means the budget is met and the machine hiccuped, which is worth
+      // more than a red build nobody trusts.
+      retries: 2,
+    },
   ],
 
   // Must be the production build, never `vite dev`: the dev server relaxes CSP
