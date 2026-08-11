@@ -1,22 +1,23 @@
 import { expect, test } from '@playwright/test';
 
 /**
- * Gate A requirements, asserted.
+ * Release requirements, asserted.
  *
  * These are checklist items that are easy to claim and easy to quietly lose in
- * a refactor: the privacy page saying what it must say, the alpha marker being
- * visible, and no service worker being registered. Each one is either true in
- * production or the release is not what it says it is.
+ * a refactor: the privacy page saying what it must say, the launch surfaces
+ * being reachable, and no service worker being registered. Each one is either
+ * true in production or the release is not what it says it is.
  */
 
-test.describe('alpha markers', () => {
-  test('marks itself as an early build', async ({ page }) => {
+test.describe('launch surfaces', () => {
+  test('keeps privacy, feedback, and source reachable from every screen', async ({ page }) => {
     await page.goto('/');
 
-    // Visible on every screen, not only the landing page — a reader who hits a
-    // rough edge should never have to wonder whether it is meant to be there.
-    await expect(page.getByText('alpha', { exact: true })).toBeVisible();
-    await expect(page.getByText(/early build shared for feedback/i)).toBeVisible();
+    // A reader who hits a rough edge must not have to go looking. These three
+    // live in the header, so they are present with and without a document.
+    await expect(page.getByRole('button', { name: 'Privacy' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Feedback' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Source code on GitHub' })).toBeVisible();
   });
 
   test('links to the repository and the issue tracker', async ({ page }) => {

@@ -12,10 +12,9 @@ import { TypefaceToggle } from './TypefaceToggle';
  * users, and this bar is where the trust claim lives. A privacy indicator that
  * disappears while you read is not an indicator.
  *
- * The alpha marker sits next to the wordmark rather than in a banner. A
- * dismissible bar would be dismissed, and one that cannot be dismissed steals
- * space from the document on every screen — but a reader who hits a rough edge
- * should never have to wonder whether it is meant to be like that.
+ * Privacy, Feedback, and Source stay in the bar on every screen for the same
+ * reason: they are the surfaces a reader needs when something looks wrong, and
+ * a link you have to go looking for is a link that does not exist.
  */
 export function Header({
   onOpenPrivacy,
@@ -51,10 +50,6 @@ export function Header({
         ) : (
           <span className="lmd-wordmark is-static">LocalMD</span>
         )}
-
-        <span className="lmd-alpha" title="Early build — expect rough edges">
-          alpha
-        </span>
 
         {source && (
           <>

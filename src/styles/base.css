@@ -120,20 +120,6 @@ body {
   color: var(--fg-subtle);
 }
 
-/* Sits beside the wordmark rather than in a banner: a dismissible bar gets
-   dismissed, and a permanent one steals space from the document forever. But a
-   reader who hits a rough edge must never have to wonder whether it is meant
-   to be like that. */
-.lmd-alpha {
-  flex: none;
-  padding: 0.1rem 0.35rem;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  color: var(--fg-subtle);
-  font-size: 0.72rem;
-  letter-spacing: 0.03em;
-}
-
 .lmd-header-link {
   text-decoration: none;
 }
@@ -301,14 +287,14 @@ body {
   line-height: 1.6;
 }
 
-.lmd-landing-alpha {
+.lmd-landing-meta {
   margin: 0.9rem 0 0;
   color: var(--fg-subtle);
   font-size: 0.75rem;
   line-height: 1.6;
 }
 
-.lmd-landing-alpha a {
+.lmd-landing-meta a {
   color: var(--fg-muted);
 }
 

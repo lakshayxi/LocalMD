@@ -103,7 +103,15 @@ const workers = await page.evaluate(async () =>
 );
 record('no service worker registered', workers === 0, `${workers} found`);
 
-record('marked as an early build', await page.getByText('alpha', { exact: true }).isVisible());
+// The three surfaces a reader needs when something looks wrong. They live in
+// the header on every screen, so losing one is a silent regression: the app
+// still boots, still renders, and quietly stops being answerable.
+record(
+  'exposes privacy, feedback, and source',
+  (await page.getByRole('button', { name: 'Privacy' }).isVisible()) &&
+    (await page.getByRole('link', { name: 'Feedback' }).isVisible()) &&
+    (await page.getByRole('link', { name: 'Source code on GitHub' }).isVisible()),
+);
 
 // ---------- Privacy page ----------
 
@@ -166,4 +174,4 @@ if (failed.length > 0) {
   for (const c of failed) console.error(`  - ${c.name}${c.detail ? ` (${c.detail})` : ''}`);
   process.exit(1);
 }
-console.log('\nGate A production checks passed.');
+console.log('\nProduction checks passed.');

@@ -5,15 +5,16 @@
 A browser-based Markdown reader — with editing when you need it — that never
 sends your document anywhere. No uploads, no accounts, no document backend.
 
-**Hosted alpha: <https://localmd-12t.pages.dev>**
+**Live: <https://localmd-12t.pages.dev>**
 
-> **Status: M4 launch candidate.** `main` now includes reading, editing, Split,
-> save-in-place where the browser permits it, download fallback everywhere
-> else, draft recovery, external-change protection, recents, and multi-tab
-> warnings. The hosted URL is still the quiet public alpha and may lag `main`
-> until the next deliberate production deploy.
+> **Status: v0.1.0.** Reading, editing, Split, save-in-place where the browser
+> permits it, download fallback everywhere else, draft recovery,
+> external-change protection, recents, and multi-tab warnings all ship. The
+> hosted URL serves the tagged release.
 >
-> This remains an early build shared for feedback.
+> Offline/PWA is not shipped. See
+> [`reports/gate-b-release.md`](reports/gate-b-release.md) for the release
+> evidence and the known limitations.
 > [Tell us what's broken](https://github.com/lakshayxi/LocalMD/issues).
 
 The privacy claim is verified against the live deployment on every release —
@@ -175,7 +176,8 @@ Beyond the usual, three suites carry unusual weight:
   adopts its new file before the next save.
 
 The release-specific evidence lives in
-[`reports/gate-b-manual-checklist.md`](reports/gate-b-manual-checklist.md) and
+[`reports/gate-b-release.md`](reports/gate-b-release.md),
+[`reports/gate-b-manual-checklist.md`](reports/gate-b-manual-checklist.md), and
 [`reports/gate-b-performance.md`](reports/gate-b-performance.md).
 
 ## License

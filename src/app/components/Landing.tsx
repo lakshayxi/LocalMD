@@ -104,8 +104,8 @@ export function Landing({ onOpenPrivacy }: { onOpenPrivacy: () => void }) {
           </button>
         </p>
 
-        <p className="lmd-landing-alpha">
-          This is an early build shared for feedback — expect rough edges.{' '}
+        <p className="lmd-landing-meta">
+          Open source, and built in the open.{' '}
           <a href={FEEDBACK_URL} target="_blank" rel="noopener noreferrer">
             Report something
           </a>{' '}
