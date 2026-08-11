@@ -49,6 +49,21 @@ const ALLOWED = [
       '.invalid is reserved by RFC 2606 and can never resolve, which is why it was chosen.',
   },
 
+  // Ours, and the only outbound links in the application. They are `href`
+  // targets a reader clicks, never anything the page fetches — the distinction
+  // this check exists to police is automatic requests, not navigation the user
+  // chose. Defined in src/app/links.ts so they stay auditable in one place.
+  {
+    prefix: 'https://github.com/lakshayxi/LocalMD',
+    why: 'Repository and feedback links in the header, landing page, and privacy page. Click-only.',
+  },
+  {
+    prefix: 'https://example.com/private-id.png',
+    why:
+      'Illustrative example inside the privacy page explaining how a remote image in your ' +
+      'own document would leak. Rendered as escaped text in a <code> element, not as a URL.',
+  },
+
   // Mermaid's parser stack (chevrotain, langium, marked) embeds documentation
   // links in thrown error messages. All are string literals in error paths.
   // Note these are deliberately narrow: allowlisting `https://github.com/`

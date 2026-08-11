@@ -7,3 +7,8 @@ test-results/
 .DS_Store
 .vscode/*
 !.vscode/extensions.json
+
+# Regenerable evidence: re-run scripts/readme-visual-pass.mjs to produce.
+# The report and results.json are committed; the images are not, to keep
+# history from growing by ~2MB on every run.
+reports/**/screenshots/

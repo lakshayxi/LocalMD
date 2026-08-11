@@ -103,7 +103,12 @@ export default tseslint.config(
 
   {
     files: ['**/*.{mjs,js}', '*.config.ts', 'scripts/**', 'e2e/**'],
-    languageOptions: { globals: globals.node },
+    languageOptions: {
+      // Both, deliberately. These files run in Node, but Playwright's
+      // `page.evaluate` callbacks are serialised and executed in the browser,
+      // so `document` and `window` are legitimately in scope inside them.
+      globals: { ...globals.node, ...globals.browser },
+    },
     rules: { 'no-restricted-imports': 'off' },
   },
 );

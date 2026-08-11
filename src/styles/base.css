@@ -120,6 +120,37 @@ body {
   color: var(--fg-subtle);
 }
 
+/* Sits beside the wordmark rather than in a banner: a dismissible bar gets
+   dismissed, and a permanent one steals space from the document forever. But a
+   reader who hits a rough edge must never have to wonder whether it is meant
+   to be like that. */
+.lmd-alpha {
+  flex: none;
+  padding: 0.1rem 0.35rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--fg-subtle);
+  font-size: 0.72rem;
+  letter-spacing: 0.03em;
+}
+
+.lmd-header-link {
+  text-decoration: none;
+}
+
+/* A button that reads as a link. Used where the action is navigation but the
+   target is in-app, so an <a href> would be a lie about what happens. */
+.lmd-linkish {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 0.18em;
+  cursor: pointer;
+}
+
 .lmd-filename {
   overflow: hidden;
   color: var(--fg-muted);
@@ -247,6 +278,56 @@ body {
   color: var(--fg-subtle);
   font-size: 0.78rem;
   line-height: 1.6;
+}
+
+.lmd-landing-alpha {
+  margin: 0.9rem 0 0;
+  color: var(--fg-subtle);
+  font-size: 0.75rem;
+  line-height: 1.6;
+}
+
+.lmd-landing-alpha a {
+  color: var(--fg-muted);
+}
+
+/* ---------- Static pages ---------- */
+
+.lmd-page {
+  min-height: calc(100dvh - var(--header-height));
+}
+
+.lmd-prose-page {
+  padding-top: 2.5rem;
+}
+
+.lmd-page-back {
+  margin: 0 0 2rem;
+  font-size: 0.8125rem;
+}
+
+.lmd-lede {
+  font-size: 1.1em;
+  color: var(--fg);
+}
+
+/* The one place the privacy page raises its voice: the sentence that admits
+   what the guarantee cannot cover. */
+.lmd-callout {
+  margin: 1.35em 0 0;
+  padding: 0.8em 1em;
+  border: 1px solid var(--border-strong);
+  border-left: 3px solid var(--warning);
+  border-radius: var(--radius);
+  background: var(--bg-surface);
+}
+
+.lmd-page-footer {
+  margin-top: 3.5rem;
+  padding-top: 1.2rem;
+  border-top: 1px solid var(--border);
+  color: var(--fg-muted);
+  font-size: 0.875rem;
 }
 
 .lmd-landing-error {

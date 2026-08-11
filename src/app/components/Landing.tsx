@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { createEmptyDocument, createPastedDocument, pickFile } from '@/platform/files';
+import { FEEDBACK_URL, REPO_URL } from '../links';
 import { useDocument } from '../store';
 
 /**
@@ -13,7 +14,7 @@ import { useDocument } from '../store';
  * them, because it answers a question the reader has *after* deciding to try
  * this, not before.
  */
-export function Landing() {
+export function Landing({ onOpenPrivacy }: { onOpenPrivacy: () => void }) {
   const open = useDocument((s) => s.open);
   const error = useDocument((s) => s.error);
   const [pasting, setPasting] = useState(false);
@@ -85,7 +86,22 @@ export function Landing() {
         <p className="lmd-landing-hint">or drop a file anywhere on this page</p>
 
         <p className="lmd-landing-trust">
-          No uploads. No account. Your file is read in this browser and never sent anywhere.
+          No uploads. No account. Your file is read in this browser and never sent anywhere.{' '}
+          <button type="button" className="lmd-linkish" onClick={onOpenPrivacy}>
+            How this works
+          </button>
+        </p>
+
+        <p className="lmd-landing-alpha">
+          This is an early build shared for feedback — expect rough edges.{' '}
+          <a href={FEEDBACK_URL} target="_blank" rel="noopener noreferrer">
+            Report something
+          </a>{' '}
+          or{' '}
+          <a href={REPO_URL} target="_blank" rel="noopener noreferrer">
+            read the source
+          </a>
+          .
         </p>
       </div>
     </main>
