@@ -34,7 +34,9 @@
   .lmd-notice,
   .lmd-toast,
   .lmd-drop-overlay,
-  .lmd-landing {
+  .lmd-landing,
+  .lmd-outline,
+  .lmd-palette-backdrop {
     display: none !important;
   }
 

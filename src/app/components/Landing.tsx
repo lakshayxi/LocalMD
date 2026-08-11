@@ -1,7 +1,9 @@
 import { useState } from 'react';
-import { createEmptyDocument, createPastedDocument, pickFile } from '@/platform/files';
+import { createEmptyDocument, createPastedDocument, openFile } from '@/platform/files';
+import { MOD_KEY } from '../format';
 import { FEEDBACK_URL, REPO_URL } from '../links';
 import { useDocument } from '../store';
+import { Recents } from './Recents';
 
 /**
  * The empty state.
@@ -21,7 +23,7 @@ export function Landing({ onOpenPrivacy }: { onOpenPrivacy: () => void }) {
   const [pasted, setPasted] = useState('');
 
   async function choose() {
-    const source = await pickFile();
+    const source = await openFile();
     if (source) await open(source);
   }
 
@@ -83,7 +85,11 @@ export function Landing({ onOpenPrivacy }: { onOpenPrivacy: () => void }) {
           </div>
         )}
 
-        <p className="lmd-landing-hint">or drop a file anywhere on this page</p>
+        <p className="lmd-landing-hint">
+          or drop a file anywhere on this page, paste with {MOD_KEY}V, or press {MOD_KEY}K
+        </p>
+
+        <Recents />
 
         <p className="lmd-landing-trust">
           No uploads. No account. Your file is read in this browser and never sent anywhere.{' '}

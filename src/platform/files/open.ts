@@ -1,18 +1,24 @@
+import { pickFileWithHandle, supportsFileSystemAccess } from './fs-access';
 import { BlobFileSource, isAcceptedFilename } from './sources';
+import type { DocumentSource } from './types';
 import { UnsupportedFileError } from './types';
 
 /**
  * Entry points for getting a file into the app.
  *
- * The File System Access API is Chromium-only, so this deliberately uses the
- * universal `<input type="file">` path for now. The FSA adapter arrives in M4
- * alongside saving, which is the only thing it actually buys us — for *opening*
- * a document the two are equivalent, and shipping one code path in M1 is
- * simpler than shipping two.
+ * Prefers the File System Access API where it exists, because a retained handle
+ * is what makes a document reopenable from the recents list. Falls back to
+ * `<input type="file">` on Safari and Firefox, which works identically for
+ * reading and simply cannot produce a recent entry.
  */
 
-/** Opens the system file picker. Resolves null if the user cancels. */
-export function pickFile(): Promise<BlobFileSource | null> {
+/** Opens the best available picker. Resolves null if the reader cancels. */
+export async function openFile(): Promise<DocumentSource | null> {
+  return supportsFileSystemAccess() ? pickFileWithHandle() : pickFileWithInput();
+}
+
+/** The universal fallback. Exported for tests; prefer `openFile`. */
+export function pickFileWithInput(): Promise<BlobFileSource | null> {
   return new Promise((resolve, reject) => {
     const input = document.createElement('input');
     input.type = 'file';

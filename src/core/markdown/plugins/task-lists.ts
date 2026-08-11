@@ -21,6 +21,35 @@ import { INTERNAL_CLASS_PREFIX } from '../types';
  * ours rather than the document's, so they aren't subject to the allowlist.
  */
 
+/**
+ * The task item's text, for use as the checkbox's accessible name.
+ *
+ * Whitespace-collapsed and capped: a task can be a whole paragraph, and a
+ * screen reader announcing four sentences before saying "checked" is worse than
+ * a truncated one. Falls back to a generic name for a checkbox with no text
+ * beside it, since an empty `aria-label` is the failure being fixed.
+ */
+function labelFor(parent: TextBearing): string {
+  const text = collectText(parent).replace(/\s+/g, ' ').trim();
+  if (!text) return 'Task';
+  return text.length > 80 ? `${text.slice(0, 79)}…` : text;
+}
+
+/**
+ * Structural rather than `Element | Root`: `visit` hands back a wider parent
+ * union than either, and this only needs the two fields it reads.
+ */
+interface TextBearing {
+  type: string;
+  value?: string | undefined;
+  children?: TextBearing[] | undefined;
+}
+
+function collectText(node: TextBearing): string {
+  if (node.type === 'text') return node.value ?? '';
+  return (node.children ?? []).map(collectText).join('');
+}
+
 export function convertTaskCheckboxes() {
   return (tree: Root): void => {
     visit(tree, 'element', (node: Element, index, parent) => {
@@ -44,6 +73,11 @@ export function convertTaskCheckboxes() {
         role: 'checkbox',
         'aria-checked': checked ? 'true' : 'false',
         'aria-disabled': 'true',
+        // A checkbox with no name is announced as just "checked" — the state
+        // without the thing it applies to, which is the least useful half. The
+        // item's own text is the name a sighted reader gets from the layout, so
+        // it is the one to carry over.
+        'aria-label': parent ? labelFor(parent) : 'Task',
       };
       node.children = [];
       return;

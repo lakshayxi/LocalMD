@@ -291,6 +291,311 @@ body {
   color: var(--fg-muted);
 }
 
+.lmd-inline-note {
+  color: var(--fg-muted);
+  font-size: 0.875rem;
+}
+
+/* ---------- Recents ---------- */
+
+.lmd-recents {
+  margin-top: 2.75rem;
+  text-align: left;
+}
+
+.lmd-recents-heading {
+  margin: 0 0 0.4rem;
+  color: var(--fg-subtle);
+  font-size: 0.7rem;
+  font-weight: 550;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.lmd-recents-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.lmd-recents-item {
+  display: flex;
+  align-items: center;
+  border-top: 1px solid var(--border);
+}
+
+.lmd-recents-item:last-child {
+  border-bottom: 1px solid var(--border);
+}
+
+.lmd-recents-open {
+  display: flex;
+  flex: 1;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  min-width: 0;
+  padding: 0.5rem 0.4rem;
+  border: 0;
+  border-radius: var(--radius);
+  background: none;
+  color: var(--fg);
+  font: inherit;
+  font-size: 0.8125rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.lmd-recents-open:hover {
+  background: var(--bg-surface);
+}
+
+.lmd-recents-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lmd-recents-meta {
+  flex: none;
+  color: var(--fg-subtle);
+  font-size: 0.75rem;
+}
+
+/* Stays faint until the row is under the cursor — removing an entry is not
+   what anyone came here to do — but is always focusable for keyboard users. */
+.lmd-recents-forget {
+  flex: none;
+  padding: 0.15rem 0.4rem;
+  border: 0;
+  border-radius: var(--radius);
+  background: none;
+  color: var(--fg-subtle);
+  font: inherit;
+  font-size: 0.95rem;
+  line-height: 1;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.lmd-recents-item:hover .lmd-recents-forget,
+.lmd-recents-forget:focus-visible {
+  opacity: 1;
+}
+
+.lmd-recents-forget:hover {
+  background: var(--bg-surface);
+  color: var(--fg);
+}
+
+/* Touch has no hover, so a control revealed by hover is a control that does not
+   exist. */
+@media (hover: none) {
+  .lmd-recents-forget {
+    opacity: 1;
+  }
+}
+
+/* ---------- Outline ---------- */
+
+/* Lives in margin the document was never going to use. Below this width there
+   is no such margin, and the palette is the way to navigate. */
+.lmd-outline {
+  position: fixed;
+  top: calc(var(--header-height) + 3.5rem);
+  left: max(1.5rem, calc(50vw - var(--prose-measure) / 2 - 17rem));
+  z-index: 5;
+  width: 14rem;
+  max-height: calc(100dvh - var(--header-height) - 6rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
+@media (max-width: 1399px) {
+  .lmd-outline {
+    display: none;
+  }
+}
+
+.lmd-outline-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.lmd-outline-heading {
+  margin: 0;
+  color: var(--fg-subtle);
+  font-size: 0.7rem;
+  font-weight: 550;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.lmd-outline-hide {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--fg-subtle);
+  font: inherit;
+  font-size: 0.7rem;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.lmd-outline:hover .lmd-outline-hide,
+.lmd-outline-hide:focus-visible {
+  opacity: 1;
+}
+
+.lmd-outline-list {
+  margin: 0;
+  padding: 0;
+  border-left: 1px solid var(--border);
+  list-style: none;
+}
+
+.lmd-outline-link {
+  display: block;
+  padding: 0.2rem 0.5rem;
+  /* Sits on top of the list's border so the active marker replaces it rather
+     than doubling it. */
+  margin-left: -1px;
+  border-left: 1px solid transparent;
+  color: var(--fg-muted);
+  text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lmd-outline-link[data-depth='2'] {
+  padding-left: 1.1rem;
+}
+
+.lmd-outline-link[data-depth='3'] {
+  padding-left: 1.7rem;
+}
+
+.lmd-outline-link:hover {
+  color: var(--fg);
+}
+
+.lmd-outline-link[aria-current='location'] {
+  border-left-color: var(--accent);
+  color: var(--fg);
+}
+
+/* ---------- Command palette ---------- */
+
+.lmd-palette-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  display: flex;
+  justify-content: center;
+  /* Sat down from the top rather than centered: the input should land near
+     where the eye already is, and a vertically centered dialog jumps as the
+     result list grows and shrinks. */
+  padding: 12vh 1rem 2rem;
+  background: color-mix(in srgb, var(--bg) 55%, transparent);
+  backdrop-filter: blur(2px);
+}
+
+.lmd-palette {
+  display: flex;
+  flex-direction: column;
+  width: min(34rem, 100%);
+  max-height: min(26rem, 70vh);
+  overflow: hidden;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-popover);
+}
+
+.lmd-palette-input {
+  flex: none;
+  padding: 0.85rem 1rem;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  background: none;
+  color: var(--fg);
+  font: inherit;
+  font-size: 0.9rem;
+}
+
+.lmd-palette-input::placeholder {
+  color: var(--fg-subtle);
+}
+
+/* The input is the only focusable thing in here; a ring around a field that
+   fills the dialog adds noise without telling anyone anything. */
+.lmd-palette-input:focus-visible {
+  outline: none;
+}
+
+.lmd-palette-results {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0.35rem;
+}
+
+.lmd-palette-list,
+.lmd-palette-list ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.lmd-palette-group {
+  padding: 0.5rem 0.6rem 0.25rem;
+  color: var(--fg-subtle);
+  font-size: 0.68rem;
+  font-weight: 550;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.lmd-palette-option {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.4rem 0.6rem;
+  border-radius: var(--radius);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.lmd-palette-option[aria-selected='true'] {
+  background: var(--accent-soft);
+}
+
+.lmd-palette-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lmd-palette-hint {
+  flex: none;
+  color: var(--fg-subtle);
+  font-size: 0.75rem;
+}
+
+.lmd-palette-empty {
+  margin: 0;
+  padding: 1.25rem 0.6rem;
+  color: var(--fg-subtle);
+  font-size: 0.85rem;
+  text-align: center;
+}
+
 /* ---------- Static pages ---------- */
 
 .lmd-page {

@@ -1,4 +1,9 @@
-export { pickFile, sourceFromDrop } from './open';
+export { openFile, pickFileWithInput, sourceFromDrop } from './open';
+export {
+  FileHandleSource,
+  pickFileWithHandle,
+  supportsFileSystemAccess,
+} from './fs-access';
 export {
   BlobFileSource,
   createEmptyDocument,

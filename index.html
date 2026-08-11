@@ -7,6 +7,10 @@
     <meta name="referrer" content="no-referrer" />
     <title>LocalMD</title>
     <meta name="description" content="Read and edit Markdown in your browser. Nothing is uploaded." />
+    <!-- Blocking on purpose: applies the saved theme before first paint, so a
+         dark-mode reader never sees a white flash. Must stay a separate file —
+         the CSP forbids inline script. -->
+    <script src="/theme-init.js"></script>
   </head>
   <body>
     <div id="root"></div>

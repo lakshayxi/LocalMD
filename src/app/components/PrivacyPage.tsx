@@ -1,4 +1,7 @@
+import { useState } from 'react';
+import { clearAllLocalData } from '@/platform/persistence';
 import { FEEDBACK_URL, REPO_URL } from '../links';
+import { useDocument } from '../store';
 
 /**
  * The privacy page.
@@ -12,6 +15,51 @@ import { FEEDBACK_URL, REPO_URL } from '../links';
  * one absolute sentence, the weaker layer is named as weaker, and all three
  * caveats are given plainly rather than buried.
  */
+/**
+ * The erase control.
+ *
+ * Inline confirmation rather than a `confirm()` dialog: this sits inside the
+ * page that just explained what is stored, so the second click happens with the
+ * explanation still on screen. It reports completion, because a destructive
+ * button that produces no visible change leaves you wondering whether it worked.
+ */
+function ClearLocalData() {
+  const hydrate = useDocument((s) => s.hydrate);
+  const [phase, setPhase] = useState<'idle' | 'confirming' | 'done'>('idle');
+
+  if (phase === 'done') {
+    return <p role="status">Cleared. Recent documents and preferences are gone from this browser.</p>;
+  }
+
+  async function clear() {
+    await clearAllLocalData();
+    // Re-reads what is now an empty store, so the recents list and the theme
+    // fall back to their defaults without a reload.
+    await hydrate();
+    setPhase('done');
+  }
+
+  return (
+    <p>
+      {phase === 'idle' ? (
+        <button type="button" className="lmd-button" onClick={() => setPhase('confirming')}>
+          Clear local data
+        </button>
+      ) : (
+        <>
+          <button type="button" className="lmd-button" onClick={() => void clear()}>
+            Yes, clear it
+          </button>{' '}
+          <button type="button" className="lmd-button" onClick={() => setPhase('idle')}>
+            Cancel
+          </button>{' '}
+          <span className="lmd-inline-note">Your files are not touched.</span>
+        </>
+      )}
+    </p>
+  );
+}
+
 export function PrivacyPage({ onClose }: { onClose: () => void }) {
   return (
     <main className="lmd-page">
@@ -90,10 +138,19 @@ export function PrivacyPage({ onClose }: { onClose: () => void }) {
 
         <h3>Local storage is not encrypted by us</h3>
         <p>
-          Preferences — and, once editing ships, unsaved drafts — are kept in your browser&rsquo;s
-          own storage. Anything with access to your browser profile can read them. LocalMD does not
-          add encryption on top, and you should not treat browser storage as a safe.
+          Two things are kept in your browser&rsquo;s own storage: your reading preferences, and a
+          list of recently opened documents. The recents list holds each file&rsquo;s{' '}
+          <strong>name and a handle</strong> — a reference your browser can use to reopen it — and{' '}
+          <strong>never any of its contents</strong>, not even a preview line. Once editing ships,
+          unsaved drafts will be kept there too.
         </p>
+        <p>
+          Anything with access to your browser profile can read all of it. LocalMD does not add
+          encryption on top, and you should not treat browser storage as a safe. You can erase all
+          of it at any time:
+        </p>
+
+        <ClearLocalData />
 
         <h2>What LocalMD does not include</h2>
 

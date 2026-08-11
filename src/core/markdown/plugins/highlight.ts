@@ -22,6 +22,12 @@ import { visit } from 'unist-util-visit';
  *
  * Unknown languages are not an error. A fence tagged `notarealanguage` renders
  * as plain code, silently — the reader wanted to read it, not to be told off.
+ *
+ * **The `-default` themes, not the plain `github-light` / `github-dark` pair.**
+ * The older ones are GitHub's pre-2022 palette, and their keyword red (#d73a49)
+ * reaches only 4.14:1 against our code background — an AA failure on the most
+ * common token in most snippets. The current themes were rebuilt for contrast
+ * and clear AA. Verified by the axe pass in e2e/a11y.spec.ts; do not swap back.
  */
 
 /**
@@ -142,8 +148,8 @@ export function highlight() {
       await Promise.all([
         import('shiki/core'),
         import('shiki/engine/javascript'),
-        import('@shikijs/themes/github-light'),
-        import('@shikijs/themes/github-dark'),
+        import('@shikijs/themes/github-light-default'),
+        import('@shikijs/themes/github-dark-default'),
         ...languages.map((language) => GRAMMARS[language]()),
       ]);
 
@@ -157,7 +163,7 @@ export function highlight() {
       for (const block of blocks) {
         const result = highlighter.codeToHast(block.code.replace(/\n$/, ''), {
           lang: block.language,
-          themes: { light: 'github-light', dark: 'github-dark' },
+          themes: { light: 'github-light-default', dark: 'github-dark-default' },
           // Emits both palettes as CSS custom properties instead of baking one
           // in, so the theme toggle is a CSS switch rather than a re-render.
           defaultColor: false,
