@@ -517,9 +517,12 @@ export const useDocument = create<DocumentState>((set, get) => ({
         rendered,
         status: 'ready',
         allowRemoteContent: false,
-        // Every document opens as something to read. Landing in Edit because
-        // the last one was edited would be the wrong default for a reader.
-        mode: 'view',
+        // Files and pasted text arrive to be read. A new, empty document has
+        // nothing to read yet: opening it in View produces a blank page that
+        // looks like the button did nothing. Start that one source kind in the
+        // focused editor; the mode still resets per document rather than
+        // leaking whatever the previous document used.
+        mode: source.kind === 'new' ? 'edit' : 'view',
         dirty: false,
         // Just read, so it cannot already disagree with itself. Reset because
         // this state belongs to the document, not to the session.

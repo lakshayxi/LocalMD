@@ -219,6 +219,25 @@ test.describe('save as with a real browser handle', () => {
   });
 });
 
+test.describe('new document', () => {
+  test('opens directly in a focused editor', async ({ page }) => {
+    await page.getByRole('button', { name: 'New', exact: true }).click();
+
+    await expect(page.getByText('Untitled.md', { exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Edit', exact: true })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+
+    const editor = page.getByRole('textbox', { name: 'Markdown source of Untitled.md' });
+    await expect(editor).toBeVisible();
+    await expect(editor).toBeFocused();
+
+    await page.keyboard.type('# First heading');
+    await expect(page.getByTitle('Unsaved changes')).toBeVisible();
+  });
+});
+
 test.describe('split', () => {
   test.use({ viewport: { width: 1400, height: 900 } });
 
