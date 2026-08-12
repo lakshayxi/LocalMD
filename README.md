@@ -184,13 +184,16 @@ deferred signed-release path.
 
 Publishing a GitHub Release runs
 [`.github/workflows/release.yml`](.github/workflows/release.yml): build and
-check → e2e on Chromium, Firefox, and WebKit → deploy that exact `dist/` to
-Cloudflare Pages → run `scripts/verify-production.mjs` against the live origin.
-The tests gate the deploy, and the tag has to match `package.json`.
+check, then e2e on Chromium, Firefox, and WebKit. The tag has to match
+`package.json`.
 
-It needs the `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` repository
-secrets. `workflow_dispatch` re-runs it against a chosen ref if a deploy fails
-after the release is already published.
+This workflow does not deploy the browser app. Cloudflare Pages builds and
+deploys it directly through its own Git integration, on every push to
+`main`. Run `scripts/verify-production.mjs` yourself against the live origin
+to check a deploy landed correctly.
+
+`workflow_dispatch` re-runs the same checks against a chosen ref without
+cutting a new release.
 
 ### A note on the dev server
 
