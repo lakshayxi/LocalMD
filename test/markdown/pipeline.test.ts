@@ -83,8 +83,9 @@ describe('frontmatter', () => {
 
 describe('code blocks', () => {
   // Highlighting itself moved out of the pipeline in M5 — the pipeline now
-  // leaves every fence as plain, tagged code and the renderer upgrades it
-  // afterwards. See test/markdown/highlight.test.ts.
+  // leaves every fence as plain code and the renderer upgrades it afterwards.
+  // Unlabelled fences receive an internal post-sanitize marker so the worker
+  // may detect them conservatively. See test/markdown/highlight.test.ts.
   it('leaves a known language tagged for the renderer to highlight', async () => {
     const result = await html('```typescript\nconst x = 1;\n```');
 
@@ -103,11 +104,30 @@ describe('code blocks', () => {
     expect(result).not.toContain('shiki');
   });
 
-  it('leaves unlabelled fences alone', async () => {
+  it('marks unlabelled backtick and tilde fences for local detection', async () => {
     const result = await html('```\nplain text\n```');
+    const tilde = await html('~~~\nconst answer = 42;\n~~~');
 
     expect(result).toContain('plain text');
+    expect(result).toContain('lmd-code-autodetect');
+    expect(tilde).toContain('lmd-code-autodetect');
     expect(result).not.toContain('shiki');
+  });
+
+  it('does not mark indented code or an explicit unknown language', async () => {
+    const indented = await html('    const answer = 42;');
+    const explicit = await html('```notarealanguage\nconst answer = 42;\n```');
+
+    expect(indented).not.toContain('lmd-code-autodetect');
+    expect(explicit).not.toContain('lmd-code-autodetect');
+  });
+
+  it('does not trust an internal detection class supplied through raw html', async () => {
+    const result = await html(
+      '<pre><code class="lmd-code-autodetect">const answer = 42;</code></pre>',
+    );
+
+    expect(result).not.toContain('lmd-code-autodetect');
   });
 
   it('escapes html inside code blocks', async () => {

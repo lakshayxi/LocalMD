@@ -375,11 +375,39 @@ body {
   min-height: calc(100dvh - var(--header-height));
 }
 
-/* The Suspense fallback while the CodeMirror chunk arrives. Reserves the space
-   so the header does not jump, and shows nothing — the chunk resolves too
-   quickly for a spinner to read as anything but a flicker. */
+/* The Suspense fallback while the CodeMirror chunk arrives. It reserves the
+   column and avoids making a cold first entry into Edit look like data loss. */
 .lmd-editor.is-loading {
   min-height: calc(100dvh - var(--header-height));
+}
+
+.lmd-editor-loading-lines {
+  display: grid;
+  width: min(34rem, 72%);
+  gap: 0.75rem;
+  padding: 2rem 0;
+}
+
+.lmd-editor-loading-label {
+  display: block;
+  padding-top: 2rem;
+  color: var(--fg-muted);
+  font-size: 0.8125rem;
+}
+
+.lmd-editor-loading-lines span {
+  display: block;
+  height: 0.625rem;
+  border-radius: 0.25rem;
+  background: var(--border);
+}
+
+.lmd-editor-loading-lines span:nth-child(2) {
+  width: 84%;
+}
+
+.lmd-editor-loading-lines span:nth-child(3) {
+  width: 62%;
 }
 
 .lmd-dirty {
@@ -983,4 +1011,36 @@ body {
 
 .lmd-toast.is-error .lmd-toast-close {
   color: var(--warning);
+}
+
+/* ---------- Application update ---------- */
+
+.lmd-update-notice {
+  position: fixed;
+  right: 1.25rem;
+  bottom: 1.25rem;
+  z-index: 190;
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  max-width: min(38rem, calc(100vw - 2rem));
+  padding: 0.65rem 0.75rem 0.65rem 0.9rem;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-popover);
+  font-size: 0.8125rem;
+}
+
+@media (max-width: 40rem) {
+  .lmd-update-notice {
+    right: 1rem;
+    bottom: 1rem;
+    left: 1rem;
+    flex-wrap: wrap;
+  }
+
+  .lmd-update-notice span {
+    flex-basis: 100%;
+  }
 }

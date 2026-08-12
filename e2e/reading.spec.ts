@@ -22,6 +22,14 @@ Intro paragraph with **bold** and a [link](https://example.com).
 const x: number = 1;
 \`\`\`
 
+\`\`\`
+interface AutoDetected { ready: boolean }
+\`\`\`
+
+\`\`\`
+x = 1
+\`\`\`
+
 | Column | Value |
 | ------ | ----- |
 | a      | 1     |
@@ -44,7 +52,18 @@ test.beforeEach(async ({ page }) => {
 test('renders the document structure', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'Release Notes' })).toBeVisible();
   await expect(page.getByRole('table')).toBeVisible();
-  await expect(page.locator('.lmd-document pre code')).toContainText('const x: number = 1;');
+  await expect(page.locator('.lmd-document code.language-typescript')).toContainText(
+    'const x: number = 1;',
+  );
+});
+
+test('detects confident unlabelled code and leaves ambiguous code plain', async ({ page }) => {
+  const detected = page.locator('.lmd-code-block pre.shiki').filter({ hasText: 'AutoDetected' });
+  await expect(detected).toHaveCount(1);
+  await expect(detected).toContainText('interface AutoDetected { ready: boolean }');
+
+  const ambiguous = page.locator('.lmd-code-block pre:not(.shiki)').filter({ hasText: 'x = 1' });
+  await expect(ambiguous).toHaveCount(1);
 });
 
 test('renders task list items as inert controls, never form inputs', async ({ page }) => {

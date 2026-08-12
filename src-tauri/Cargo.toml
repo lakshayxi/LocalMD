@@ -1,0 +1,29 @@
+[package]
+name = "localmd"
+version = "0.2.0"
+description = "A local-first Markdown reader and editor"
+authors = ["Lakshay Saini"]
+license = "MIT"
+repository = "https://github.com/lakshayxi/LocalMD"
+edition = "2021"
+rust-version = "1.85.0"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+name = "localmd_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.6.3", features = [] }
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+sha2 = "0.10"
+tauri = { version = "2.11.3", features = [] }
+tauri-plugin-dialog = "2"
+tempfile = "3"
+uuid = { version = "1", features = ["v4"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+libc = "0.2"

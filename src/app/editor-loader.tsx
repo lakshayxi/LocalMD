@@ -9,9 +9,9 @@ import { Suspense, lazy } from 'react';
  * what holds the initial payload flat — measured, not assumed, by
  * scripts/assert-bundle-budget.mjs.
  *
- * The fallback is deliberately empty rather than a spinner. The chunk resolves
- * in a few milliseconds from cache and in well under a second cold; flashing a
- * loading state for that long reads as a stutter, not as progress.
+ * The fallback reserves the editor column and gives a quiet indication that
+ * the source is loading. This avoids presenting a blank document surface on a
+ * cold first entry into Edit mode.
  */
 const LazyEditor = lazy(async () => {
   const { Editor } = await import('@/editor');
@@ -20,7 +20,18 @@ const LazyEditor = lazy(async () => {
 
 export function EditorSurface(props: React.ComponentProps<typeof LazyEditor>) {
   return (
-    <Suspense fallback={<div className="lmd-editor is-loading" aria-hidden="true" />}>
+    <Suspense
+      fallback={
+        <div className="lmd-editor is-loading" role="status" aria-live="polite">
+          <span className="lmd-editor-loading-label">Loading editor</span>
+          <div className="lmd-editor-loading-lines" aria-hidden="true">
+            <span />
+            <span />
+            <span />
+          </div>
+        </div>
+      }
+    >
       <LazyEditor {...props} />
     </Suspense>
   );

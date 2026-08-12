@@ -8,7 +8,7 @@ import { toJsxRuntime } from 'hast-util-to-jsx-runtime';
 // exactly what it did: 58KB gzipped of remark, rehype and parse5, preloaded
 // before the landing page had decided whether to open anything.
 import { languageOfClassNames } from '@/core/markdown/highlight';
-import type { Language } from '@/core/markdown/highlight';
+import type { HighlightLanguage } from '@/core/markdown/highlight';
 import { useNearViewport } from './use-near-viewport';
 
 /**
@@ -30,7 +30,7 @@ import { useNearViewport } from './use-near-viewport';
  * business. The app provides it; this file only decides *when* to ask.
  */
 
-export type Highlighter = (language: Language, code: string) => Promise<Root | null>;
+export type Highlighter = (language: HighlightLanguage, code: string) => Promise<Root | null>;
 
 /** Highlighting is an enhancement, so its absence has to be a working default. */
 const HighlightContext = createContext<Highlighter>(async () => null);
@@ -53,7 +53,7 @@ export function HighlightProvider({
  * a duplicate copy of every code block through the tree is what keeps a
  * code-heavy megabyte from being held in memory twice.
  */
-function readCode(children: ReactNode): { language: Language; code: string } | null {
+function readCode(children: ReactNode): { language: HighlightLanguage; code: string } | null {
   if (!isValidElement(children)) return null;
 
   const props = children.props as { className?: unknown; children?: ReactNode };
@@ -63,11 +63,16 @@ function readCode(children: ReactNode): { language: Language; code: string } | n
       ? props.className.split(' ')
       : [];
 
+  const tagged = classNames.some((name) => name.startsWith('language-'));
   const language = languageOfClassNames(classNames);
-  if (!language) return null;
+  // An explicit but unsupported tag is an instruction, not an invitation to
+  // guess. Only a fence with no tag opts into best-effort detection.
+  if (tagged && !language) return null;
+  const auto = classNames.includes('lmd-code-autodetect');
+  if (!language && !auto) return null;
 
   const code = flatten(props.children);
-  return code ? { language, code } : null;
+  return code ? { language: language ?? 'auto', code } : null;
 }
 
 function flatten(node: ReactNode): string {

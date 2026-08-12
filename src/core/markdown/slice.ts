@@ -29,6 +29,34 @@ import type { Root, RootContent } from 'hast';
  */
 export const SLICE_NODES = 2000;
 
+export interface DocumentSlice {
+  nodes: RootContent[];
+  /** Stable across renders when this slice's sanitized content is unchanged. */
+  hash: string;
+}
+
+/**
+ * A compact, deterministic content hash for React reconciliation.
+ *
+ * Two independent 32-bit accumulators plus the serialized length make an
+ * accidental collision impractical without paying the cost of Web Crypto for
+ * every slice. The tree is already sanitized plain data, so JSON key order is
+ * deterministic for the same pipeline output.
+ */
+export function hashSlice(nodes: RootContent[]): string {
+  const serialized = JSON.stringify(nodes);
+  let first = 0x811c9dc5;
+  let second = 0x9e3779b9;
+
+  for (let index = 0; index < serialized.length; index += 1) {
+    const code = serialized.charCodeAt(index);
+    first = Math.imul(first ^ code, 0x01000193);
+    second = Math.imul(second ^ code, 0x85ebca6b);
+  }
+
+  return `${(first >>> 0).toString(36)}-${(second >>> 0).toString(36)}-${serialized.length}`;
+}
+
 /** Weighs a block by what it costs to move and to commit, which is nodes. */
 function weigh(node: RootContent): number {
   if (node.type !== 'element') return 1;
@@ -60,4 +88,8 @@ export function sliceTree(tree: Root, maxNodes: number = SLICE_NODES): RootConte
   // screen before it, and a caller that receives nothing cannot tell the
   // difference between "empty" and "still loading".
   return slices.length > 0 ? slices : [[]];
+}
+
+export function sliceTreeWithHashes(tree: Root, maxNodes: number = SLICE_NODES): DocumentSlice[] {
+  return sliceTree(tree, maxNodes).map((nodes) => ({ nodes, hash: hashSlice(nodes) }));
 }

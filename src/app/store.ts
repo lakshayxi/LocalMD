@@ -1,7 +1,13 @@
 import { create } from 'zustand';
 import type { TextShape } from '@/core/text/encoding';
 import type { DocumentContents, DocumentSource, SaveOutcome } from '@/platform/files';
-import { FileHandleSource, MemorySource } from '@/platform/files';
+import {
+  FileHandleSource,
+  isFileBackedDocumentSource,
+  isFileHandleSource,
+  LARGE_FILE_BYTES,
+  MemorySource,
+} from '@/platform/files';
 import type { RecentDocument, StoredDraft, StoredPrefs } from '@/platform/persistence';
 import {
   discardDraft,
@@ -102,6 +108,13 @@ interface DocumentState {
    */
   allowRemoteContent: boolean;
 
+  /**
+   * Large documents start without optional renderer hydration or editing.
+   * Parsing still produces the complete readable document; the reader chooses
+   * when to pay for highlighting, diagrams, and the editor.
+   */
+  fastMode: boolean;
+
   mode: Mode;
   /** Edited since it was last saved. */
   dirty: boolean;
@@ -144,10 +157,11 @@ interface DocumentState {
   open: (source: DocumentSource) => Promise<void>;
   openRecent: (recent: RecentDocument) => Promise<void>;
   forget: (id: string) => Promise<void>;
-  restoreDraft: (draft: StoredDraft) => Promise<void>;
+  restoreDraft: (draft: StoredDraft, detachedSource?: DocumentSource) => Promise<void>;
   dismissDraft: (id: string) => Promise<void>;
   refreshDrafts: () => Promise<void>;
   setMode: (mode: Mode) => Promise<void>;
+  renderFully: () => void;
   updateText: (text: string) => void;
   flushDraft: () => void;
   save: () => Promise<void>;
@@ -177,6 +191,21 @@ function persist(state: Pick<DocumentState, 'theme' | 'typeface' | 'outlinePinne
 }
 
 /**
+ * The threshold is exclusive: a document of exactly 2 MiB remains on the
+ * normal path. File-backed sources supply their original byte size; pasted and
+ * recovered text is measured as the UTF-8 bytes it would have in a file.
+ */
+export function shouldUseFastMode(sourceBytes: number | null, text: string): boolean {
+  const bytes = sourceBytes ?? new TextEncoder().encode(text).byteLength;
+  return bytes > LARGE_FILE_BYTES;
+}
+
+/** Fast mode always wins over the mode a document would otherwise enter. */
+export function modeWithFastMode(preferred: Mode, fastMode: boolean): Mode {
+  return fastMode ? 'view' : preferred;
+}
+
+/**
  * Split's live-preview debounce, and the guard against out-of-order renders.
  *
  * Module-scoped rather than in the store: they are scheduling machinery, not
@@ -185,6 +214,25 @@ function persist(state: Pick<DocumentState, 'theme' | 'typeface' | 'outlinePinne
  */
 let previewTimer: ReturnType<typeof setTimeout> | undefined;
 let previewGeneration = 0;
+
+/**
+ * Monotonic ownership for asynchronous saves.
+ *
+ * A save writes the text captured when it starts. The editor remains usable
+ * while a native picker or disk write is in flight, so `dirty` may only clear
+ * if no edit landed after that snapshot was taken. Comparing the text is not
+ * enough: editing away and back is still a newer document history.
+ */
+let editRevision = 0;
+
+/** Changes whenever a document ownership transition starts. */
+let documentRevision = 0;
+
+/**
+ * Separates the conflict a save started with from one discovered while it ran.
+ * A successful overwrite or Save As resolves the former, never the latter.
+ */
+let externalChangeRevision = 0;
 
 function schedulePreview(get: () => DocumentState): void {
   clearTimeout(previewTimer);
@@ -271,13 +319,14 @@ function forgetDraft(
 function confirmDiscard(
   set: (partial: Partial<DocumentState>) => void,
   get: () => DocumentState,
+  discardDraft = true,
 ): boolean {
   const { dirty, source } = get();
   if (!dirty || !source) return true;
 
   if (!window.confirm(`"${source.name}" has unsaved changes. Discard them?`)) return false;
 
-  forgetDraft(set, get);
+  if (discardDraft) forgetDraft(set, get);
   return true;
 }
 
@@ -364,6 +413,20 @@ async function adoptDraft(
   };
 }
 
+function errorMessage(error: unknown, fallback: string): string {
+  if (error instanceof Error) return error.message;
+  if (typeof error === 'string' && error.trim()) return error;
+  return fallback;
+}
+
+function disposeSource(source: DocumentSource | null): void {
+  if (!source?.dispose) return;
+  void source.dispose().catch(() => {
+    // Revocation is cleanup. The document transition has already completed,
+    // so a platform cleanup failure must not restore stale document state.
+  });
+}
+
 /**
  * The shared body of Save and Save As.
  *
@@ -382,10 +445,23 @@ async function performSave(
   // Re-entry is real: ⌘S held down, or a click while the picker is already up.
   if (!source || !shape || status !== 'ready' || saving) return;
 
+  const savedRevision = editRevision;
+  const savedDocumentRevision = documentRevision;
+  const savedConflictRevision = externalChangeRevision;
+  let adoptedSource: DocumentSource | null = null;
+
   set({ saving: true, notice: null });
 
   try {
     const outcome = await run(source, { text, shape });
+
+    // The operation belongs to the document it started from. A native dialog
+    // can stay open long enough for another application action to replace that
+    // document, and a late completion must never adopt its source, clear the new
+    // document's dirty bit, or raise its conflict banner.
+    if (get().source !== source || documentRevision !== savedDocumentRevision) return;
+
+    const hasNewerEdits = editRevision !== savedRevision;
 
     if (outcome.kind === 'cancelled') return;
 
@@ -394,6 +470,7 @@ async function performSave(
     // moment ago. The banner carries the three ways out; this only has to say
     // why the keystroke did not do what it usually does.
     if (outcome.kind === 'conflict') {
+      externalChangeRevision += 1;
       set({
         externalChange: true,
         notice: {
@@ -411,43 +488,70 @@ async function performSave(
       // `outcome.name`, not `source.name`: a pasted document displays as
       // "Pasted document" and is written as "Pasted document.md", and the
       // message has to name the file that actually exists.
-      set({ dirty: false, notice: { kind: 'info', message: `Downloaded ${outcome.name}.` } });
-      forgetDraft(set, get);
+      set({
+        dirty: hasNewerEdits,
+        notice: {
+          kind: 'info',
+          message: hasNewerEdits
+            ? `Downloaded ${outcome.name}. Newer edits are still unsaved.`
+            : `Downloaded ${outcome.name}.`,
+        },
+      });
+      if (!hasNewerEdits) forgetDraft(set, get);
       return;
     }
 
     // Save As hands back a handle to the *new* file, and from here on ⌘S must
     // write there rather than to the original.
+    adoptedSource = outcome.source;
     set({
       source: outcome.source,
-      dirty: false,
+      dirty: hasNewerEdits,
       // Whatever the disagreement was, this settles it: the bytes on disk are
       // now ours, and the source re-stat'd itself as it wrote, so the baseline
       // matches again. Save As settles it too, by pointing at a different file.
-      externalChange: false,
-      notice: { kind: 'info', message: `Saved ${outcome.source.name}.` },
+      externalChange:
+        externalChangeRevision === savedConflictRevision ? false : get().externalChange,
+      notice: {
+        kind: 'info',
+        message: hasNewerEdits
+          ? `Saved ${outcome.source.name}. Newer edits are still unsaved.`
+          : `Saved ${outcome.source.name}.`,
+      },
     });
+    if (outcome.source !== source) disposeSource(source);
 
     // The file on disk is now the better copy, so the draft has nothing left to
     // protect — and keeping it would leave the text of a saved document in
     // storage, which is the one thing this store promises not to do.
-    forgetDraft(set, get);
+    if (!hasNewerEdits) forgetDraft(set, get);
 
-    if (outcome.source instanceof FileHandleSource) {
+    if (isFileHandleSource(outcome.source)) {
       await recordRecent(outcome.source.handle, outcome.source.size);
       await get().refreshRecents();
     }
   } catch (error) {
     // The document stays open and stays dirty. A failed save must never look
     // like a successful one, and must never cost the reader their text.
-    set({
-      notice: {
-        kind: 'error',
-        message: error instanceof Error ? error.message : 'That file could not be saved.',
-      },
-    });
+    if (get().source === source && documentRevision === savedDocumentRevision) {
+      set({
+        notice: {
+          kind: 'error',
+          message: errorMessage(error, 'That file could not be saved.'),
+        },
+      });
+    }
   } finally {
-    set({ saving: false });
+    // `saving` belongs to the operation, not globally to whichever document is
+    // current when it finishes. A newer document may already have begun its own
+    // save, and this completion must not unlock that operation's controls.
+    const currentSource = get().source;
+    if (
+      (currentSource === source || currentSource === adoptedSource) &&
+      documentRevision === savedDocumentRevision
+    ) {
+      set({ saving: false });
+    }
   }
 }
 
@@ -469,6 +573,7 @@ export const useDocument = create<DocumentState>((set, get) => ({
   status: 'empty',
   error: null,
   allowRemoteContent: false,
+  fastMode: false,
   mode: 'view',
   dirty: false,
   externalChange: false,
@@ -502,14 +607,24 @@ export const useDocument = create<DocumentState>((set, get) => ({
     // tab close would, and has to ask the same question.
     if (!confirmDiscard(set, get)) return;
 
-    set({ status: 'loading', error: null, source, draftId: null });
+    const previousSource = get().source;
+    documentRevision += 1;
+    const openedDocumentRevision = documentRevision;
+
+    set({ status: 'loading', error: null, source, draftId: null, saving: false });
+    if (previousSource !== source) disposeSource(previousSource);
 
     try {
       const { text, shape } = await source.read();
+      if (documentRevision !== openedDocumentRevision || get().source !== source) return;
+
       // Opening a new document resets the remote-content decision. See the note
       // on the field above — this reset is the security property, not an
       // implementation detail.
       const rendered = await renderMarkdown(text, { allowRemoteContent: false });
+      if (documentRevision !== openedDocumentRevision || get().source !== source) return;
+
+      const fastMode = shouldUseFastMode(source.size, text);
 
       set({
         text,
@@ -517,12 +632,13 @@ export const useDocument = create<DocumentState>((set, get) => ({
         rendered,
         status: 'ready',
         allowRemoteContent: false,
+        fastMode,
         // Files and pasted text arrive to be read. A new, empty document has
         // nothing to read yet: opening it in View produces a blank page that
         // looks like the button did nothing. Start that one source kind in the
         // focused editor; the mode still resets per document rather than
         // leaking whatever the previous document used.
-        mode: source.kind === 'new' ? 'edit' : 'view',
+        mode: modeWithFastMode(source.kind === 'new' ? 'edit' : 'view', fastMode),
         dirty: false,
         // Just read, so it cannot already disagree with itself. Reset because
         // this state belongs to the document, not to the session.
@@ -531,14 +647,18 @@ export const useDocument = create<DocumentState>((set, get) => ({
       });
 
       // Only handle-backed sources can be reopened, so only they are recorded.
-      if (source instanceof FileHandleSource) {
+      if (isFileHandleSource(source)) {
         await recordRecent(source.handle, source.size);
+        if (documentRevision !== openedDocumentRevision || get().source !== source) return;
         await get().refreshRecents();
       }
     } catch (error) {
+      if (documentRevision !== openedDocumentRevision || get().source !== source) return;
+
+      disposeSource(source);
       set({
         status: 'error',
-        error: error instanceof Error ? error.message : 'That file could not be opened.',
+        error: errorMessage(error, 'That file could not be opened.'),
         source: null,
       });
     }
@@ -592,45 +712,80 @@ export const useDocument = create<DocumentState>((set, get) => ({
    * anywhere, and the guard that has been protecting this text all along has to
    * keep protecting it.
    */
-  async restoreDraft(draft) {
+  async restoreDraft(draft, detachedSource) {
     // Restoring over a document that is itself mid-edit loses the same work a
     // close would, and has to ask the same question.
     if (!confirmDiscard(set, get)) return;
 
-    set({ status: 'loading', error: null, draftId: null });
+    const previousSource = get().source;
+    documentRevision += 1;
+    const restoredDocumentRevision = documentRevision;
 
-    const { source, notice, conflict } = await adoptDraft(draft);
-    const rendered = await renderMarkdown(draft.text, { allowRemoteContent: false });
+    set({ status: 'loading', error: null, draftId: null, saving: false });
+    disposeSource(previousSource);
 
-    set({
-      source,
-      text: draft.text,
-      // The shape travelled with the draft, so a document recovered from a
-      // crash still saves with the line endings and BOM the file arrived with.
-      shape: draft.shape,
-      rendered,
-      status: 'ready',
-      allowRemoteContent: false,
-      // Edit, where `open` uses View. A document being opened is something to
-      // read; a draft being restored is work that was interrupted, and putting
-      // the reader back where they were beats making them press ⌘E first.
-      mode: 'edit',
-      dirty: true,
-      // Adopting the row rather than minting a new one is what keeps this to a
-      // single draft — the next flush overwrites what was just recovered
-      // instead of filing a second copy of it alongside.
-      draftId: draft.id,
-      // A draft written against a version of the file that is no longer there
-      // arrives already in conflict, and says so through the same banner a
-      // change noticed on focus would — with the same three answers rather than
-      // a warning the reader can only acknowledge.
-      externalChange: conflict,
-      notice,
-    });
+    let restoredSource: DocumentSource | null = null;
+    try {
+      const { source, notice, conflict } = detachedSource
+        ? { source: detachedSource, notice: null, conflict: false }
+        : await adoptDraft(draft);
+      restoredSource = source;
+      if (documentRevision !== restoredDocumentRevision) {
+        disposeSource(restoredSource);
+        return;
+      }
 
-    // The row stays: the work is still unsaved, so the net still applies. What
-    // has to go is this document's entry in the *offer*, which is now open.
-    set({ drafts: get().drafts.filter((entry) => entry.id !== draft.id) });
+      const rendered = await renderMarkdown(draft.text, { allowRemoteContent: false });
+      if (documentRevision !== restoredDocumentRevision) {
+        disposeSource(restoredSource);
+        return;
+      }
+
+      // The recovered draft is the document being shown. Its backing file may
+      // have grown or shrunk since the draft was captured, so its size cannot
+      // decide whether rendering the recovered text needs fast mode.
+      const fastMode = shouldUseFastMode(null, draft.text);
+
+      set({
+        source,
+        text: draft.text,
+        // The shape travelled with the draft, so a document recovered from a
+        // crash still saves with the line endings and BOM the file arrived with.
+        shape: draft.shape,
+        rendered,
+        status: 'ready',
+        allowRemoteContent: false,
+        fastMode,
+        // Edit, where `open` uses View. A document being opened is something to
+        // read; a draft being restored is work that was interrupted, and putting
+        // the reader back where they were beats making them press ⌘E first.
+        mode: modeWithFastMode('edit', fastMode),
+        dirty: true,
+        // Adopting the row rather than minting a new one is what keeps this to a
+        // single draft — the next flush overwrites what was just recovered
+        // instead of filing a second copy of it alongside.
+        draftId: draft.id,
+        // A draft written against a version of the file that is no longer there
+        // arrives already in conflict, and says so through the same banner a
+        // change noticed on focus would — with the same three answers rather than
+        // a warning the reader can only acknowledge.
+        externalChange: conflict,
+        notice,
+      });
+
+      // The row stays: the work is still unsaved, so the net still applies. What
+      // has to go is this document's entry in the *offer*, which is now open.
+      set({ drafts: get().drafts.filter((entry) => entry.id !== draft.id) });
+    } catch (error) {
+      if (documentRevision !== restoredDocumentRevision) return;
+
+      disposeSource(restoredSource);
+      set({
+        status: 'error',
+        error: errorMessage(error, 'That draft could not be restored.'),
+        source: null,
+      });
+    }
   },
 
   async dismissDraft(id) {
@@ -648,6 +803,7 @@ export const useDocument = create<DocumentState>((set, get) => ({
    * screen, and it pays for that with a debounce rather than a render per key.
    */
   updateText(text) {
+    editRevision += 1;
     set({ text, dirty: true });
     // The crash net. The navigation guard covers every way of leaving the page
     // that the page is told about; this covers the ways it is not.
@@ -685,6 +841,8 @@ export const useDocument = create<DocumentState>((set, get) => ({
     const id = draftId ?? crypto.randomUUID();
     if (id !== draftId) set({ draftId: id });
 
+    const browserFile = isFileHandleSource(source) ? source : null;
+
     void saveDraft({
       id,
       name: source.name,
@@ -692,17 +850,21 @@ export const useDocument = create<DocumentState>((set, get) => ({
       shape,
       // Only a handle survives a reload, so only a handle-backed document can be
       // recognised as "the same file" on the way back in.
-      handle: source instanceof FileHandleSource ? source.handle : null,
+      handle: browserFile?.handle ?? null,
       // Cached on the source at read and write time rather than stat'd here:
       // this runs on a teardown path, where there is no time left to await a
       // file. See FileHandleSource.lastModified.
-      baseModified: source instanceof FileHandleSource ? source.lastModified : null,
+      baseModified: browserFile?.lastModified ?? null,
     });
   },
 
   async setMode(mode) {
-    const { mode: current, status } = get();
+    const { mode: current, status, fastMode } = get();
     if (mode === current || status !== 'ready') return;
+
+    // Fast mode is deliberately read-only. The notice carries the explicit
+    // opt-in that enables both enhancements and editing together.
+    if (fastMode && mode !== 'view') return;
 
     cancelPreview();
     set({ mode });
@@ -711,6 +873,11 @@ export const useDocument = create<DocumentState>((set, get) => ({
     // just made. Re-rendering on the way *out* of editing, rather than on every
     // keystroke, is the whole reason typing is cheap.
     if (mode !== 'edit') await get().refreshPreview();
+  },
+
+  renderFully() {
+    if (!get().fastMode) return;
+    set({ fastMode: false });
   },
 
   /**
@@ -768,18 +935,28 @@ export const useDocument = create<DocumentState>((set, get) => ({
    */
   async reloadFromDisk() {
     const { source, status } = get();
-    if (status !== 'ready' || !(source instanceof FileHandleSource)) return;
+    if (status !== 'ready' || !isFileBackedDocumentSource(source)) return;
 
     // Reloading over unsaved work loses exactly what closing would, so it asks
     // the same question — and on yes, drops the draft with it.
-    if (!confirmDiscard(set, get)) return;
+    // Keep the recovery row until the replacement has actually been read. A
+    // failed reload leaves the dirty document in place, so deleting its draft
+    // before the read would silently remove its crash protection.
+    if (!confirmDiscard(set, get, false)) return;
 
-    const reloaded = new FileHandleSource(source.handle);
-    set({ status: 'loading', error: null });
+    documentRevision += 1;
+
+    const reloaded = source.reopen();
+    set({ status: 'loading', error: null, saving: false });
 
     try {
       const { text, shape } = await reloaded.read();
       const rendered = await renderMarkdown(text, { allowRemoteContent: false });
+      const fastMode = shouldUseFastMode(reloaded.size, text);
+
+      // A later open or close owns the store now. Do not let this reload install
+      // an older document over it when its asynchronous read/render completes.
+      if (get().source !== source) return;
 
       set({
         source: reloaded,
@@ -788,14 +965,19 @@ export const useDocument = create<DocumentState>((set, get) => ({
         rendered,
         status: 'ready',
         allowRemoteContent: false,
+        fastMode,
+        mode: modeWithFastMode(get().mode, fastMode),
         dirty: false,
         externalChange: false,
         notice: { kind: 'info', message: `Reloaded ${reloaded.name}.` },
       });
+      forgetDraft(set, get);
     } catch {
       // The document is still here and still theirs. A failed reload must cost
       // them nothing, so it goes back to exactly what was on screen — including
       // the conflict, which is still true.
+      if (get().source !== source) return;
+
       set({
         status: 'ready',
         notice: { kind: 'error', message: `${source.name} could not be read. It may have moved.` },
@@ -818,11 +1000,33 @@ export const useDocument = create<DocumentState>((set, get) => ({
     // Already flagged, so there is nothing to learn and a banner already saying
     // it. Re-running would only risk clearing what the reader has not answered.
     if (status !== 'ready' || externalChange) return;
-    if (!(source instanceof FileHandleSource) || source.lastModified === null) return;
+    if (!isFileBackedDocumentSource(source) || source.lastModified === null) return;
 
+    const baseline = source.lastModified;
+    const checkedDocumentRevision = documentRevision;
     const current = await source.getFileMeta();
-    if (!current || current.lastModified === source.lastModified) return;
 
+    // Metadata belongs to both a source and the baseline it was compared with.
+    // A save, reload, open, or close that wins while the stat is in flight makes
+    // this result historical rather than evidence about the current document.
+    const latest = get();
+    if (
+      latest.source !== source ||
+      documentRevision !== checkedDocumentRevision ||
+      latest.status !== 'ready' ||
+      latest.externalChange ||
+      source.lastModified !== baseline
+    ) {
+      return;
+    }
+    if (
+      !current ||
+      (current.lastModified === source.lastModified && current.size === source.size)
+    ) {
+      return;
+    }
+
+    externalChangeRevision += 1;
     set({ externalChange: true });
   },
 
@@ -834,6 +1038,9 @@ export const useDocument = create<DocumentState>((set, get) => ({
     // Every close path runs through here — the wordmark, the palette, and
     // whatever gets added later.
     if (!confirmDiscard(set, get)) return;
+
+    const source = get().source;
+    documentRevision += 1;
 
     // A heading fragment belongs to the document that was open. Left in the
     // URL, it would scroll the *next* document to whichever of its headings
@@ -855,12 +1062,15 @@ export const useDocument = create<DocumentState>((set, get) => ({
       status: 'empty',
       error: null,
       allowRemoteContent: false,
+      fastMode: false,
       mode: 'view',
       dirty: false,
       externalChange: false,
       draftId: null,
+      saving: false,
       notice: null,
     });
+    disposeSource(source);
 
     // Closing lands on the screen that offers drafts back, so the list behind it
     // has to be current — a row this close just discarded must not still be sat

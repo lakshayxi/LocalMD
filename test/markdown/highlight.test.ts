@@ -1,6 +1,6 @@
 import { toHtml } from 'hast-util-to-html';
 import { describe, expect, it } from 'vitest';
-import { highlightCode, resolveLanguage } from '@/core/markdown';
+import { detectLanguage, highlightCode, resolveLanguage } from '@/core/markdown';
 
 /**
  * Highlighting, now that it is a thing the renderer asks for per block rather
@@ -37,6 +37,26 @@ describe('resolveLanguage', () => {
   });
 });
 
+describe('detectLanguage', () => {
+  it.each([
+    ['typescript', 'interface Person { name: string }'],
+    ['javascript', 'const answer = () => 42;'],
+    ['python', 'def greet(name):\n    return f"Hello {name}"'],
+    ['json', '{"name":"LocalMD","private":true}'],
+    ['bash', '#!/bin/zsh\necho "$HOME"'],
+    ['sql', 'SELECT title FROM documents WHERE dirty = false;'],
+  ] as const)('detects strong %s syntax', (language, code) => {
+    expect(detectLanguage(code)).toBe(language);
+  });
+
+  it.each(['', 'ordinary prose in a code fence', 'x = 1', 'graph TD\nA --> B']) (
+    'leaves ambiguous content plain',
+    (code) => {
+      expect(detectLanguage(code)).toBeNull();
+    },
+  );
+});
+
 describe('highlightCode', () => {
   it('highlights a known language', async () => {
     const tree = await highlightCode('typescript', 'const x = 1;');
@@ -52,6 +72,18 @@ describe('highlightCode', () => {
 
     expect(result).toContain('--lmd-code-light:');
     expect(result).toContain('--lmd-code-dark:');
+  });
+
+  it('highlights a confidently detected unlabelled block', async () => {
+    const tree = await highlightCode('auto', 'def greet(name):\n    return f"Hello {name}"');
+    const result = toHtml(tree!);
+
+    expect(result).toContain('shiki');
+    expect(result).toContain('greet');
+  });
+
+  it('keeps an ambiguous unlabelled block plain', async () => {
+    expect(await highlightCode('auto', 'x = 1')).toBeNull();
   });
 
   it('escapes hostile content rather than emitting it as markup', async () => {

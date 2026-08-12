@@ -78,8 +78,9 @@ export function PrivacyPage({ onClose }: { onClose: () => void }) {
 
         <p className="lmd-lede">
           LocalMD never uploads your document. Parsing, rendering, and editing happen entirely in
-          your browser. There is no upload endpoint and no document backend. After the first load,
-          LocalMD makes no network requests of its own.
+          your browser. There is no upload endpoint and no document backend. LocalMD checks this
+          origin for app updates and caches only its own app files for offline use. It never sends
+          your document or drafts.
         </p>
 
         <h2>How that is enforced</h2>

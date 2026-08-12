@@ -1,5 +1,5 @@
 /// <reference lib="webworker" />
-import { highlightCode, renderMarkdown, sliceTree } from '@/core/markdown';
+import { highlightCode, renderMarkdown, sliceTreeWithHashes } from '@/core/markdown';
 import type { Request, Response } from './protocol';
 
 /**
@@ -37,7 +37,7 @@ worker.onmessage = async (event: MessageEvent<Request>) => {
         request.source,
         request.options,
       );
-      const slices = sliceTree(tree);
+      const slices = sliceTreeWithHashes(tree);
 
       const meta: Response = {
         id: request.id,
@@ -50,8 +50,8 @@ worker.onmessage = async (event: MessageEvent<Request>) => {
       };
       worker.postMessage(meta);
 
-      for (const nodes of slices) {
-        const slice: Response = { id: request.id, ok: true, kind: 'slice', nodes };
+      for (const documentSlice of slices) {
+        const slice: Response = { id: request.id, ok: true, kind: 'slice', slice: documentSlice };
         worker.postMessage(slice);
       }
       return;

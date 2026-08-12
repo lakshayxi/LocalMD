@@ -49,6 +49,21 @@ function Div({ className, children, ...rest }: ComponentProps<'div'>) {
   );
 }
 
+/** Mermaid stays readable source in large-document fast mode. */
+function PlainDiv({ className, children, ...rest }: ComponentProps<'div'>) {
+  const classes = typeof className === 'string' ? className.split(' ') : [];
+
+  if (classes.includes('lmd-mermaid')) {
+    return <pre className="lmd-mermaid-source">{extractText(children)}</pre>;
+  }
+
+  return (
+    <div className={className} {...rest}>
+      {children}
+    </div>
+  );
+}
+
 function extractText(children: ReactNode): string {
   if (typeof children === 'string') return children;
   if (Array.isArray(children)) return children.map(extractText).join('');
@@ -59,4 +74,14 @@ export const components: Components = {
   pre: CodeBlock,
   table: Table,
   div: Div,
+};
+
+/**
+ * Behavior-free overrides for fast mode. Omitting `pre` keeps fenced code as
+ * the plain `<pre><code>` emitted by the pipeline, with no viewport observer or
+ * worker highlighting request.
+ */
+export const fastComponents: Components = {
+  table: Table,
+  div: PlainDiv,
 };

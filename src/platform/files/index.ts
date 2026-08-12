@@ -2,6 +2,7 @@ export { openFile, pickFileWithInput, sourceFromDrop } from './open';
 export { downloadText } from './download';
 export {
   FileHandleSource,
+  isFileHandleSource,
   pickFileWithHandle,
   saveWithPicker,
   supportsFileSystemAccess,
@@ -16,4 +17,13 @@ export {
   MemorySource,
 } from './sources';
 export { UnsupportedFileError } from './types';
-export type { DocumentContents, DocumentSource, SaveOutcome, SourceKind } from './types';
+export { isFileBackedDocumentSource } from './types';
+export type {
+  DocumentContents,
+  DocumentSource,
+  FileBackedDocumentSource,
+  FileMetadata,
+  SaveOptions,
+  SaveOutcome,
+  SourceKind,
+} from './types';

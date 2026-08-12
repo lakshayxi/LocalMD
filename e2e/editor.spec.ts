@@ -49,6 +49,18 @@ async function openDocument(page: Page, text = DOCUMENT) {
   await expect(page.getByRole('article')).toBeVisible();
 }
 
+/** Opens large fixtures without making Playwright type them into a textarea. */
+async function openDroppedDocument(page: Page, text: string) {
+  await page.evaluate((contents) => {
+    const transfer = new DataTransfer();
+    transfer.items.add(new File([contents], 'large.md', { type: 'text/markdown' }));
+    document
+      .querySelector('.lmd-drop-root')
+      ?.dispatchEvent(new DragEvent('drop', { dataTransfer: transfer, bubbles: true }));
+  }, text);
+  await expect(page.getByRole('article')).toBeVisible();
+}
+
 /**
  * CodeMirror binds `Mod-`, which is Cmd on macOS and Ctrl elsewhere. Chosen in
  * Node rather than the page because the browser is what varies, not the app.
@@ -285,6 +297,51 @@ test.describe('theme', () => {
 });
 
 test.describe('large documents', () => {
+  test('opens over 2 MiB read-only and hydrates only after explicit opt-in', async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(browserName !== 'chromium', 'large-mode hydration is engine-independent');
+    test.slow();
+
+    const prefix = [
+      '# Large document',
+      '',
+      '```typescript',
+      'const answer: number = 42;',
+      '```',
+      '',
+      '```mermaid',
+      'graph TD',
+      '  A[Start] --> B[Finish]',
+      '```',
+      '',
+    ].join('\n');
+    const threshold = 2 * 1024 * 1024;
+    const large = prefix + 'x'.repeat(threshold + 1 - prefix.length);
+
+    await openDroppedDocument(page, large);
+
+    const notice = page.getByText(/read-only fast mode/i);
+    await expect(notice).toBeVisible();
+    await expect(page.getByText(/over 2 MiB/)).toBeVisible();
+    await expect(page.locator('.lmd-code-block')).toHaveCount(0);
+    await expect(page.locator('.shiki')).toHaveCount(0);
+    await expect(page.locator('.lmd-mermaid-source')).toContainText('A[Start] --> B[Finish]');
+    await expect(page.locator('.lmd-mermaid-svg')).toHaveCount(0);
+
+    // The normal mode control cannot bypass the explicit large-document choice.
+    await page.getByRole('button', { name: 'Edit', exact: true }).click();
+    await expect(page.locator('.cm-editor')).toHaveCount(0);
+
+    await page.getByRole('button', { name: 'Render fully' }).click();
+    await expect(notice).toHaveCount(0);
+    await expect(page.locator('.lmd-code-block')).toHaveCount(1);
+    await expect(page.locator('.lmd-mermaid-svg')).toBeVisible();
+
+    await enterEditMode(page);
+  });
+
   test('stays responsive on a large document', async ({ page }) => {
     const big = `# Big\n\n${'A paragraph of ordinary prose, repeated to make the document large.\n\n'.repeat(
       3600,

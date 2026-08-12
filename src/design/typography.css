@@ -1,0 +1,46 @@
+@import '@fontsource/dm-mono/400.css';
+
+/* Desktop type roles. Keep application chrome independent from the document's
+   reading-face preference. */
+
+[data-lmd-shell='desktop'] {
+  color: var(--lmd-desktop-text);
+  font-family: var(--lmd-desktop-font-ui);
+  font-size: var(--lmd-desktop-type-ui);
+  line-height: var(--lmd-desktop-leading-ui);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+[data-lmd-shell='desktop'] .lmd-desktop-display-type {
+  font-family: var(--lmd-desktop-font-display);
+  font-size: var(--lmd-desktop-type-title);
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  line-height: 1.15;
+}
+
+[data-lmd-shell='desktop'] .lmd-desktop-document-type {
+  font-family: var(--lmd-desktop-font-prose);
+  font-size: var(--lmd-desktop-type-prose);
+  letter-spacing: var(--lmd-desktop-tracking-body);
+  line-height: var(--lmd-desktop-leading-prose);
+}
+
+:root[data-typeface='serif'] [data-lmd-shell='desktop'] .lmd-desktop-document-type {
+  font-family: var(--lmd-desktop-font-display);
+}
+
+[data-lmd-shell='desktop'] .lmd-desktop-source-type {
+  font-family: var(--lmd-desktop-font-mono);
+  font-size: var(--lmd-desktop-type-command);
+  font-variant-ligatures: none;
+  line-height: 1.625;
+}
+
+[data-lmd-shell='desktop'] .lmd-desktop-caption-type {
+  color: var(--lmd-desktop-text-muted);
+  font-size: var(--lmd-desktop-type-caption);
+  font-weight: 500;
+  letter-spacing: 0.01em;
+}

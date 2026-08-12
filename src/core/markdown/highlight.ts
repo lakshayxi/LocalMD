@@ -80,6 +80,7 @@ const GRAMMARS = {
 } as const;
 
 export type Language = keyof typeof GRAMMARS;
+export type HighlightLanguage = Language | 'auto';
 
 /** Common fence tags that mean the same grammar. */
 const ALIASES: Record<string, Language> = {
@@ -107,6 +108,86 @@ export function resolveLanguage(name: string): Language | null {
   const lower = name.toLowerCase();
   if (lower in GRAMMARS) return lower as Language;
   return ALIASES[lower] ?? null;
+}
+
+/**
+ * Best-effort language detection for an unlabeled fenced block.
+ *
+ * This intentionally recognizes only strong, local signals. A wrong grammar
+ * is more distracting than plain code, so prose and small ambiguous snippets
+ * stay unhighlighted. Detection does not load a grammar and never leaves the
+ * render worker.
+ */
+export function detectLanguage(code: string): Language | null {
+  const source = code.trim().slice(0, 32 * 1024);
+  if (!source || source.length < 4) return null;
+
+  if (source.startsWith('{') || source.startsWith('[')) {
+    try {
+      const parsed: unknown = JSON.parse(source);
+      if (parsed !== null && typeof parsed === 'object') return 'json';
+    } catch {
+      // Continue through the conservative language rules below.
+    }
+  }
+
+  if (/^#!.*\b(?:ba|z|k)?sh\b/m.test(source)) return 'bash';
+  if (/^diff --git\s/m.test(source) || (/^@@\s/m.test(source) && /^[-+]\S/m.test(source))) {
+    return 'diff';
+  }
+
+  if (/<!doctype\s+html|<html\b|<(?:main|section|article|div|span)\b[^>]*>/i.test(source)) {
+    return 'html';
+  }
+  if (/^<\?xml\b|<\w+(?:\s+[^>]*)?>[\s\S]*<\/\w+>$/i.test(source)) return 'xml';
+
+  if (
+    /\b(?:interface|type)\s+[A-Z]\w*\s*(?:=|\{)|\b(?:const|let|var)\s+\w+\s*:\s*[A-Za-z_$]/.test(
+      source,
+    )
+  ) {
+    return /<\/?[A-Z][A-Za-z0-9.]*(?:\s|\/?>)/.test(source) ? 'tsx' : 'typescript';
+  }
+  if (
+    /\b(?:const|let|var)\s+[A-Za-z_$][\w$]*\s*=|\bfunction\s+[A-Za-z_$][\w$]*\s*\(|=>/.test(
+      source,
+    )
+  ) {
+    return 'javascript';
+  }
+
+  if (
+    /^(?:from\s+[\w.]+\s+import\s+|import\s+[\w.]+\s*$)/m.test(source) ||
+    /^(?:async\s+)?def\s+\w+\s*\([^)]*\)\s*:/m.test(source) ||
+    /^class\s+\w+(?:\([^)]*\))?\s*:/m.test(source)
+  ) {
+    return 'python';
+  }
+
+  if (/\bSELECT\b[\s\S]+\bFROM\b|\bINSERT\s+INTO\b|\bCREATE\s+TABLE\b/i.test(source)) {
+    return 'sql';
+  }
+  if (/^package\s+\w+\s*$/m.test(source) && /\bfunc\s+\w+\s*\(/.test(source)) return 'go';
+  if (/\bfn\s+\w+\s*\([^)]*\)|\blet\s+mut\b|^use\s+(?:crate|std)::/m.test(source)) {
+    return 'rust';
+  }
+  if (
+    /^import\s+SwiftUI\s*$/m.test(source) ||
+    /\bfunc\s+\w+\s*\([^)]*\)\s*(?:->[^{]+)?\{/m.test(source)
+  ) {
+    return 'swift';
+  }
+  if (/\b(?:FROM|RUN|CMD|ENTRYPOINT|WORKDIR)\s+\S+/m.test(source)) return 'docker';
+  if (/^\s*(?:export\s+)?[A-Z_][A-Z0-9_]*=\S+/m.test(source) && /(?:\$\w+|\$\{\w+\})/.test(source)) {
+    return 'bash';
+  }
+  if (/^[.#]?[\w-]+(?:\s+[.#]?[\w-]+)*\s*\{[\s\S]*\b[\w-]+\s*:\s*[^;{}]+;/m.test(source)) {
+    return 'css';
+  }
+  if (/^\[[\w.-]+\]\s*$/m.test(source) && /^\w[\w.-]*\s*=\s*.+$/m.test(source)) return 'toml';
+  if ((source.match(/^\s*[\w.-]+:\s+\S.+$/gm)?.length ?? 0) >= 2) return 'yaml';
+
+  return null;
 }
 
 /** Reads the language out of a `language-x` class list, if there is one. */
@@ -168,8 +249,13 @@ async function ready(language: Language): Promise<Highlighter> {
  * Null when the language is one we do not carry or the grammar fails to load —
  * both mean the same thing to the reader, which is that the code stays plain.
  */
-export async function highlightCode(language: Language, code: string): Promise<Root | null> {
+export async function highlightCode(
+  requestedLanguage: HighlightLanguage,
+  code: string,
+): Promise<Root | null> {
   try {
+    const language = requestedLanguage === 'auto' ? detectLanguage(code) : requestedLanguage;
+    if (!language) return null;
     const core = await ready(language);
 
     return core.codeToHast(code.replace(/\n$/, ''), {

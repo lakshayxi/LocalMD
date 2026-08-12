@@ -5,7 +5,7 @@ import { expect, test } from '@playwright/test';
  *
  * These are checklist items that are easy to claim and easy to quietly lose in
  * a refactor: the privacy page saying what it must say, the launch surfaces
- * being reachable, and no service worker being registered. Each one is either
+ * being reachable, and the offline shell being complete. Each one is either
  * true in production or the release is not what it says it is.
  */
 
@@ -74,18 +74,39 @@ test.describe('privacy page', () => {
   });
 });
 
-test('registers no service worker', async ({ page }) => {
-  // Gate A requires PWA to be complete or absent, never partial. A half-shipped
-  // service worker is the fastest way to pin readers to a broken build, and it
-  // is the one mistake in this project that would be hard to undo remotely.
+test('registers a service worker and reloads the shell offline', async ({ page, context, browserName }) => {
+  test.skip(browserName !== 'chromium', 'service-worker lifecycle is covered once in Chromium');
+
   await page.goto('/');
-  await page.waitForLoadState('networkidle');
-
-  const registrations = await page.evaluate(async () => {
-    if (!('serviceWorker' in navigator)) return 0;
-    const active = await navigator.serviceWorker.getRegistrations();
-    return active.length;
+  await page.evaluate(async () => {
+    await Promise.race([
+      navigator.serviceWorker.ready,
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('service worker did not become ready')), 10_000),
+      ),
+    ]);
   });
+  // clientsClaim stays disabled so a newly installed build never takes over a
+  // document mid-session. One reader-controlled navigation establishes the
+  // normal controlled state before the network is removed.
+  await page.reload({ waitUntil: 'networkidle' });
 
-  expect(registrations).toBe(0);
+  expect(await page.evaluate(() => navigator.serviceWorker.controller !== null)).toBe(true);
+
+  await context.setOffline(true);
+  try {
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await expect(page.getByRole('heading', { name: 'LocalMD' })).toBeVisible();
+
+    // Prove the cold offline pack supports the real product path, not only a
+    // static landing page: parse Markdown in the worker, then load the editor.
+    await page.getByRole('button', { name: 'Paste' }).click();
+    await page.getByLabel('Markdown to read').fill('# Offline document\n\nStill local.');
+    await page.getByRole('button', { name: 'Read it' }).click();
+    await expect(page.getByRole('heading', { name: 'Offline document' })).toBeVisible();
+    await page.getByRole('button', { name: 'Edit', exact: true }).click();
+    await expect(page.locator('.cm-editor')).toBeVisible();
+  } finally {
+    await context.setOffline(false);
+  }
 });

@@ -43,7 +43,18 @@ const layerConfigs = Object.entries(LAYERS).map(([layer, forbidden]) => ({
 }));
 
 export default tseslint.config(
-  { ignores: ['dist', 'coverage', 'playwright-report', 'test-results', 'node_modules'] },
+  {
+    ignores: [
+      'dist',
+      'dist-desktop',
+      'coverage',
+      'playwright-report',
+      'test-results',
+      'node_modules',
+      'src-tauri/target',
+      'src-tauri/gen',
+    ],
+  },
 
   js.configs.recommended,
   ...tseslint.configs.recommended,

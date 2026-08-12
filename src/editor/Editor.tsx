@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import type { EditorView } from '@codemirror/view';
+import { openSearchPanel } from '@codemirror/search';
 import { createEditor } from './setup';
 
 /**
@@ -59,6 +60,17 @@ export function Editor({
     // *initial* text, and re-running on a change to it would recreate the
     // editor underneath the person typing.
   }, [docId]);
+
+  useEffect(() => {
+    const openFind = () => {
+      const editor = view.current;
+      if (!editor) return;
+      editor.focus();
+      openSearchPanel(editor);
+    };
+    window.addEventListener('localmd:find-editor', openFind);
+    return () => window.removeEventListener('localmd:find-editor', openFind);
+  }, []);
 
   return <div className="lmd-editor" ref={host} />;
 }

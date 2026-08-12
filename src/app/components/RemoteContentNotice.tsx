@@ -13,7 +13,11 @@ import { useDocument } from '../store';
  *    on a README with a dozen badges.
  *  - State it as a decision already made on the reader's behalf, not an error.
  */
-export function RemoteContentNotice() {
+export function RemoteContentNotice({
+  canLoadRemoteContent = true,
+}: {
+  canLoadRemoteContent?: boolean;
+}) {
   // Selecting `rendered` rather than deriving inside the selector: a selector
   // that allocates returns a fresh reference each call, which Zustand treats as
   // a state change and loops on.
@@ -37,10 +41,13 @@ export function RemoteContentNotice() {
         {blocked.length} remote {blocked.length === 1 ? 'image' : 'images'} withheld — loading{' '}
         {blocked.length === 1 ? 'it' : 'them'} would tell <strong>{hostLabel}</strong> that you
         opened this document.
+        {!canLoadRemoteContent && ' Remote images stay off in the desktop app.'}
       </p>
-      <button type="button" className="lmd-chip is-action" onClick={() => void setAllow(true)}>
-        Load images
-      </button>
+      {canLoadRemoteContent && (
+        <button type="button" className="lmd-chip is-action" onClick={() => void setAllow(true)}>
+          Load images
+        </button>
+      )}
     </div>
   );
 }

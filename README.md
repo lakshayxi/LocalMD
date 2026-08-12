@@ -12,10 +12,16 @@ sends your document anywhere. No uploads, no accounts, no document backend.
 > external-change protection, recents, and multi-tab warnings all ship. The
 > hosted URL serves the tagged release.
 >
-> Offline/PWA is not shipped. See
+> The development build adds an offline app shell and reader-controlled updates
+> for the next release. The hosted v0.1.0 URL does not include them yet. See
 > [`reports/gate-b-release.md`](reports/gate-b-release.md) for the release
 > evidence and the known limitations.
 > [Tell us what's broken](https://github.com/lakshayxi/LocalMD/issues).
+
+> **macOS status: 0.2.0 development build.** The `macos` branch adds a Tauri 2
+> application with native Open, Save, and Save As. Local Apple Silicon `.app`
+> and `.dmg` builds work. Public downloads remain blocked on Developer ID
+> signing, Apple notarization, and close or quit protection.
 
 The privacy claim is verified against the live deployment on every release —
 see [reports/gate-a-production.md](reports/gate-a-production.md) for the
@@ -33,6 +39,8 @@ re-run the checks yourself.
 - Preserves LF or CRLF, a UTF-8 BOM, and the presence or absence of the final
   newline across edits and saves.
 - Keeps bounded, local drafts and offers recovery after an interrupted session.
+- Reloads the app shell offline and installs updates only after you accept a prompt.
+- Opens documents over 2 MiB in read-only fast mode until you choose full rendering.
 - Refuses to silently overwrite a file that changed on disk and warns when the
   same file is open in several LocalMD tabs.
 - Provides a command palette, keyboard shortcuts, a wide-screen outline,
@@ -69,7 +77,8 @@ The guarantee, stated precisely:
 
 > LocalMD never uploads your document. Parsing, rendering, and editing happen
 > entirely in your browser. There is no upload endpoint and no document backend.
-> After the first load, LocalMD makes no network requests of its own.
+> LocalMD checks this origin for app updates and caches only its own app files.
+> It never sends your document or drafts.
 
 This rests on two mechanisms with **different strengths**, and it matters that
 they are not conflated:
@@ -93,7 +102,7 @@ Three honest caveats:
   browser* contact that host. Blocked by default; you can opt in per document.
 - **Static hosting logs.** Whoever serves the app sees that you loaded it — IP,
   user agent, asset paths — like any website. It never sees a file.
-- **Local storage isn't encrypted by us.** Drafts live in your browser's
+- **Local storage is not encrypted by us.** Drafts live in your browser's
   IndexedDB, readable by anything with access to your browser profile.
 
 No analytics. No error reporting. No CDN. No third-party runtime dependencies.
@@ -130,6 +139,21 @@ npm run dev
 | `npm run perf` | §16 render budgets on the committed corpus. `PERF_STRICT=1` asserts the targets themselves |
 | `npm run lint` | ESLint, including module boundary enforcement |
 | `npm run typecheck` | TypeScript project references |
+| `npm run desktop:dev` | Start the Tauri macOS application in development mode |
+| `npm run build:desktop` | Build and inspect the dedicated desktop frontend artifact |
+| `npm run desktop:build -- --target aarch64-apple-darwin` | Build the local Apple Silicon `.app` and `.dmg` |
+| `npm run test:desktop` | Test the production desktop composition |
+| `npm run test:design` | Test design graph interactions, screenshots, and accessibility |
+
+### macOS distribution
+
+The first public macOS release will use a signed and notarized GitHub Release
+disk image. Homebrew will install the same disk image through a Cask with a
+fixed SHA-256 checksum. A direct `curl` command can download that release asset.
+
+Do not use the current local disk image as a public download. Read the complete
+[macOS distribution procedure](reports/macos/distribution.md) for signing,
+notarization, GitHub Release, `curl`, and Homebrew details.
 
 ### Releasing
 

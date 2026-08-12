@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { FileHandleSource } from '@/platform/files';
+import { isFileHandleSource } from '@/platform/files';
 import type { DocumentSource } from '@/platform/files';
 import { watchPeers, type PeerWatcher } from '@/platform/sync/peers';
 import { useDocument } from './store';
@@ -57,5 +57,5 @@ export function usePeerTabs(): number {
  * learns to ignore. Without a handle the honest answer is that we cannot tell.
  */
 function handleOf(source: DocumentSource | null): FileSystemFileHandle | null {
-  return source instanceof FileHandleSource ? source.handle : null;
+  return isFileHandleSource(source) ? source.handle : null;
 }

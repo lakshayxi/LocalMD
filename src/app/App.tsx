@@ -7,6 +7,7 @@ import { Landing } from './components/Landing';
 import { Palette } from './components/Palette';
 import { PrivacyPage } from './components/PrivacyPage';
 import { Toast } from './components/Toast';
+import { UpdateNotice } from './components/UpdateNotice';
 import { Workspace } from './components/Workspace';
 import { useDocument } from './store';
 import { useNavigationGuard } from './use-navigation-guard';
@@ -104,31 +105,38 @@ export function App() {
     <Palette onClose={() => setPaletteOpen(false)} onOpenPrivacy={() => navigate('privacy')} />
   );
 
-  if (route === 'privacy') {
-    return (
+  const screen =
+    route === 'privacy' ? (
       <>
         <Header onOpenPrivacy={() => navigate('privacy')} peerTabs={peerTabs} />
         <PrivacyPage onClose={() => navigate('document')} />
         {palette}
         <Toast />
       </>
+    ) : (
+      <DropTarget>
+        <Header onOpenPrivacy={() => navigate('privacy')} peerTabs={peerTabs} />
+        {/* Above the workspace rather than inside it, so it is present in Read,
+            Edit and Split alike. A conflict is a fact about the document, not
+            about the mode someone happens to be looking at it in. */}
+        <ExternalChangeNotice />
+        {status === 'ready' && rendered ? (
+          <Workspace onRendered={onRendered} />
+        ) : (
+          <Landing onOpenPrivacy={() => navigate('privacy')} />
+        )}
+        {palette}
+        <Toast />
+      </DropTarget>
     );
-  }
 
+  // The registration hook must stay mounted across application routes. Each
+  // mount owns a Workbox listener set, and route changes must not duplicate it
+  // or reset a dismissed update prompt.
   return (
-    <DropTarget>
-      <Header onOpenPrivacy={() => navigate('privacy')} peerTabs={peerTabs} />
-      {/* Above the workspace rather than inside it, so it is present in Read,
-          Edit and Split alike. A conflict is a fact about the document, not
-          about the mode someone happens to be looking at it in. */}
-      <ExternalChangeNotice />
-      {status === 'ready' && rendered ? (
-        <Workspace onRendered={onRendered} />
-      ) : (
-        <Landing onOpenPrivacy={() => navigate('privacy')} />
-      )}
-      {palette}
-      <Toast />
-    </DropTarget>
+    <>
+      {screen}
+      <UpdateNotice />
+    </>
   );
 }

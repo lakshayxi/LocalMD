@@ -1,5 +1,11 @@
-import type { Root, RootContent } from 'hast';
-import type { BlockedResource, Heading, Language, RenderOptions } from '@/core/markdown';
+import type { Root } from 'hast';
+import type {
+  BlockedResource,
+  DocumentSlice,
+  Heading,
+  HighlightLanguage,
+  RenderOptions,
+} from '@/core/markdown';
 
 /**
  * What the main thread and the render worker say to each other.
@@ -24,7 +30,7 @@ import type { BlockedResource, Heading, Language, RenderOptions } from '@/core/m
 /** What is being asked for, before the id that lets an answer find its caller. */
 export type Ask =
   | { kind: 'render'; source: string; options: RenderOptions }
-  | { kind: 'highlight'; language: Language; code: string };
+  | { kind: 'highlight'; language: HighlightLanguage; code: string };
 
 export type Request = Ask & { id: number };
 
@@ -40,6 +46,6 @@ export type Response =
       slices: number;
     }
   /** One slice of top-level blocks, in document order. */
-  | { id: number; ok: true; kind: 'slice'; nodes: RootContent[] }
+  | { id: number; ok: true; kind: 'slice'; slice: DocumentSlice }
   | { id: number; ok: true; kind: 'highlight'; result: Root | null }
   | { id: number; ok: false; message: string };

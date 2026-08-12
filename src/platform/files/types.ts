@@ -4,7 +4,7 @@ import type { TextShape } from '@/core/text/encoding';
  * How a document got here. Determines what saving can do, and nothing else —
  * the rest of the app reads `canSaveInPlace` rather than switching on this.
  */
-export type SourceKind = 'fs-handle' | 'picked-file' | 'pasted' | 'new';
+export type SourceKind = 'fs-handle' | 'native-file' | 'picked-file' | 'pasted' | 'new';
 
 export interface DocumentContents {
   /** Normalized to LF, BOM stripped. */
@@ -97,6 +97,35 @@ export interface DocumentSource {
    * This is the escape hatch a conflict banner points at.
    */
   saveAs(contents: DocumentContents, suggestedName?: string): Promise<SaveOutcome>;
+
+  /** Releases platform-owned access when this source no longer owns the document. */
+  dispose?(): Promise<void>;
+}
+
+export interface FileMetadata {
+  lastModified: number;
+  size: number;
+}
+
+/** A source that can detect and reload changes made outside LocalMD. */
+export interface FileBackedDocumentSource extends DocumentSource {
+  readonly kind: 'fs-handle' | 'native-file';
+  readonly lastModified: number | null;
+  getFileMeta(): Promise<FileMetadata | null>;
+  /** Returns a new session identity for the same file. */
+  reopen(): FileBackedDocumentSource;
+}
+
+export function isFileBackedDocumentSource(
+  source: DocumentSource | null,
+): source is FileBackedDocumentSource {
+  return (
+    source !== null &&
+    (source.kind === 'fs-handle' || source.kind === 'native-file') &&
+    'lastModified' in source &&
+    typeof (source as Partial<FileBackedDocumentSource>).getFileMeta === 'function' &&
+    typeof (source as Partial<FileBackedDocumentSource>).reopen === 'function'
+  );
 }
 
 export class UnsupportedFileError extends Error {

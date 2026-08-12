@@ -47,6 +47,7 @@ class FakeHandle {
   lastModified = 1_000;
   /** Set to make the file unreachable, as a deleted or moved one would be. */
   missing = false;
+  onPermissionRequest?: () => void;
 
   constructor(
     readonly name: string,
@@ -86,6 +87,7 @@ class FakeHandle {
 
   async requestPermission() {
     this.requested += 1;
+    this.onPermissionRequest?.();
     return this.permission;
   }
 
@@ -261,6 +263,17 @@ describe('external changes', () => {
     expect(handle.written).toBe('');
   });
 
+  it('treats a size change as suspicious even when the timestamp is retained', async () => {
+    const handle = new FakeHandle('doc.md', 'original\n');
+    const source = sourceFor(handle);
+    const contents = await source.read();
+
+    handle.changeOnDisk('a longer external version\n', 1_000);
+
+    expect((await source.save(contents)).kind).toBe('conflict');
+    expect(handle.written).toBe('');
+  });
+
   it('does not prompt for write permission on a save it is going to refuse', async () => {
     const handle = new FakeHandle('doc.md', 'original\n');
     handle.permission = 'prompt';
@@ -273,6 +286,21 @@ describe('external changes', () => {
     // Answering a permission dialog for a write that was never going to happen
     // teaches the reader that the dialog does not mean anything.
     expect(handle.requested).toBe(0);
+  });
+
+  it('rechecks for changes made while write permission is being requested', async () => {
+    const handle = new FakeHandle('doc.md', 'original\n');
+    handle.permission = 'prompt';
+    const source = sourceFor(handle);
+    const contents = await source.read();
+    handle.onPermissionRequest = () => {
+      handle.changeOnDisk('changed during the prompt\n');
+      handle.permission = 'granted';
+    };
+
+    expect((await source.save(contents)).kind).toBe('conflict');
+    expect(handle.requested).toBe(1);
+    expect(handle.written).toBe('');
   });
 
   it('writes when the reader has said to overwrite', async () => {
@@ -315,17 +343,25 @@ describe('external changes', () => {
     );
   });
 
-  it('still saves a file that has been deleted underneath it', async () => {
+  it('does not recreate a file that has been deleted underneath it', async () => {
     const handle = new FakeHandle('doc.md', 'original\n');
     const source = sourceFor(handle);
     const contents = await source.read();
 
     handle.missing = true;
 
-    // A file we cannot stat is usually one that is gone, and writing recreates
-    // it — which is the only way the reader has left to keep their work. The
-    // check exists to stop us replacing someone's edit, not to strand people.
-    expect((await source.save(contents)).kind).toBe('saved');
+    expect((await source.save(contents)).kind).toBe('conflict');
+    expect(handle.written).toBe('');
+  });
+
+  it('only recreates a missing file after an explicit overwrite', async () => {
+    const handle = new FakeHandle('doc.md', 'original\n');
+    const source = sourceFor(handle);
+    const contents = await source.read();
+    handle.missing = true;
+
+    expect((await source.save(contents, { overwrite: true })).kind).toBe('saved');
+    expect(handle.written).toBe('original\n');
   });
 
   it('adopts a baseline recorded elsewhere, for a recovered draft', async () => {

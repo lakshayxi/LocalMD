@@ -2,6 +2,7 @@ import { decodeText, encodeText } from '@/core/text/encoding';
 import type {
   DocumentContents,
   DocumentSource,
+  FileBackedDocumentSource,
   SaveOptions,
   SaveOutcome,
   SourceKind,
@@ -33,9 +34,9 @@ export function supportsFileSystemAccess(): boolean {
  * capability is a property of the handle, not of whether we have written the
  * save path yet. M4 adds `save()`; this does not change.
  */
-export class FileHandleSource implements DocumentSource {
+export class FileHandleSource implements FileBackedDocumentSource {
   readonly id: string;
-  readonly kind: SourceKind = 'fs-handle';
+  readonly kind = 'fs-handle' as const satisfies SourceKind;
   readonly canSaveInPlace = true;
 
   private cachedSize: number | null = null;
@@ -75,6 +76,10 @@ export class FileHandleSource implements DocumentSource {
     return decodeText(await file.text());
   }
 
+  reopen(): FileHandleSource {
+    return new FileHandleSource(this.handle);
+  }
+
   /**
    * Writes back to the file the reader opened.
    *
@@ -97,18 +102,20 @@ export class FileHandleSource implements DocumentSource {
       // Stat'd here and now. A reading taken when the window regained focus is
       // already history by the time ⌘S arrives, and the gap between them is
       // exactly long enough for a `git checkout` to land in.
-      const current = await this.getFileMeta();
-
-      // A file that cannot be stat'd is almost always one that has been deleted,
-      // and writing recreates it — which is what the reader wants and the only
-      // way they have left to keep their work in a file. Refusing on missing
-      // evidence would strand them; refusing on *contrary* evidence is the point.
-      if (current && this.cachedModified !== null && current.lastModified !== this.cachedModified) {
-        return { kind: 'conflict', lastModified: current.lastModified };
-      }
+      const conflict = this.conflictWith(await this.getFileMeta());
+      if (conflict) return conflict;
     }
 
     if (!(await ensureWritePermission(this.handle))) return { kind: 'cancelled' };
+
+    // A permission prompt can leave the application suspended for an arbitrary
+    // amount of time. Recheck after it returns, immediately before opening the
+    // writable, so an edit made while the dialog was open cannot slip through a
+    // preflight that was true only before the prompt.
+    if (!options.overwrite) {
+      const conflict = this.conflictWith(await this.getFileMeta());
+      if (conflict) return conflict;
+    }
 
     await writeToHandle(this.handle, encodeText(contents.text, contents.shape));
 
@@ -166,6 +173,33 @@ export class FileHandleSource implements DocumentSource {
       return null;
     }
   }
+
+  /**
+   * Compares every baseline field the browser exposes cheaply and reliably.
+   *
+   * A timestamp alone is not enough: filesystems and sync tools can retain an
+   * mtime while replacing content. Size catches that common case without adding
+   * document bytes to the shared metadata interface. If the original handle can
+   * no longer be stat'd, ordinary Save refuses rather than recreating a deleted
+   * or moved file. Explicit overwrite remains the only path that can do that.
+   */
+  private conflictWith(current: { lastModified: number; size: number } | null): SaveOutcome | null {
+    if (!current) {
+      return { kind: 'conflict', lastModified: this.cachedModified ?? 0 };
+    }
+
+    const modifiedChanged =
+      this.cachedModified !== null && current.lastModified !== this.cachedModified;
+    const sizeChanged = this.cachedSize !== null && current.size !== this.cachedSize;
+
+    return modifiedChanged || sizeChanged
+      ? { kind: 'conflict', lastModified: current.lastModified }
+      : null;
+  }
+}
+
+export function isFileHandleSource(source: DocumentSource | null): source is FileHandleSource {
+  return source?.kind === 'fs-handle';
 }
 
 /**

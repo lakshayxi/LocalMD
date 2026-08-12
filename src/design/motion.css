@@ -1,0 +1,23 @@
+/* Motion confirms state changes. It does not decorate the shell. */
+
+[data-lmd-shell='desktop'] {
+  --lmd-desktop-motion-fast: 90ms;
+  --lmd-desktop-motion-standard: 160ms;
+  --lmd-desktop-ease-out: cubic-bezier(0.2, 0, 0, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-lmd-shell='desktop'] {
+    --lmd-desktop-motion-fast: 0.01ms;
+    --lmd-desktop-motion-standard: 0.01ms;
+  }
+
+  [data-lmd-shell='desktop'] *,
+  [data-lmd-shell='desktop'] *::before,
+  [data-lmd-shell='desktop'] *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

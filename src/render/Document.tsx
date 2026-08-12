@@ -1,8 +1,8 @@
-import type { RootContent } from 'hast';
 import { Fragment, jsx, jsxs } from 'react/jsx-runtime';
 import { memo, useEffect, useState } from 'react';
 import { toJsxRuntime } from 'hast-util-to-jsx-runtime';
-import { components } from './components';
+import type { DocumentSlice } from '@/core/markdown';
+import { components, fastComponents } from './components';
 
 /**
  * Renders a sanitized document as React elements, a slice at a time.
@@ -20,32 +20,36 @@ import { components } from './components';
  * them one task at a time turns a single long block into a series of short ones
  * and puts the first screenful up almost immediately.
  *
- * Each slice is memoized on the identity of its array, which is what keeps this
- * linear rather than quadratic: mounting slice twelve must not re-render the
- * eleven already on screen.
+ * Each slice is memoized by its sanitized-content hash. This keeps progressive
+ * mounting linear and preserves unchanged slices across Split preview updates.
  */
 
-const Slice = memo(function Slice({ nodes }: { nodes: RootContent[] }) {
-  return toJsxRuntime(
-    { type: 'root', children: nodes },
-    { Fragment, jsx, jsxs, components, ignoreInvalidStyle: true },
-  );
-});
+const Slice = memo(
+  function Slice({ slice, enhance }: { slice: DocumentSlice; enhance: boolean }) {
+    return toJsxRuntime(
+      { type: 'root', children: slice.nodes },
+      {
+        Fragment,
+        jsx,
+        jsxs,
+        components: enhance ? components : fastComponents,
+        ignoreInvalidStyle: true,
+      },
+    );
+  },
+  (before, after) => before.enhance === after.enhance && before.slice.hash === after.slice.hash,
+);
 
 export function Document({
   slices,
+  enhance = true,
   onComplete,
 }: {
-  slices: RootContent[][];
+  slices: DocumentSlice[];
+  enhance?: boolean;
   onComplete?: () => void;
 }) {
   const [mounted, setMounted] = useState(1);
-
-  // A new document starts from its own first slice. Without this, opening a
-  // short document after a long one would mount all of it in one commit.
-  useEffect(() => {
-    setMounted(1);
-  }, [slices]);
 
   useEffect(() => {
     if (mounted >= slices.length) {
@@ -59,14 +63,13 @@ export function Document({
     // 16ms, which on a megabyte is several seconds of watching it grow.
     const timer = setTimeout(() => setMounted((count) => count + 1), 0);
     return () => clearTimeout(timer);
-  }, [mounted, slices, onComplete]);
+  }, [mounted, slices.length, onComplete]);
 
   return (
     <article className="lmd-document" aria-label="Document">
-      {slices.slice(0, mounted).map((nodes, index) => (
-        // The index is the identity: slices are a stable cut of one immutable
-        // document, and a new document replaces the array wholesale.
-        <Slice key={index} nodes={nodes} />
+      {slices.slice(0, mounted).map((slice, index) => (
+        // Keep position in the key because identical repeated blocks are valid.
+        <Slice key={`${index}:${slice.hash}`} slice={slice} enhance={enhance} />
       ))}
     </article>
   );

@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <filter id="tile-shadow" x="-20%" y="-20%" width="140%" height="150%">
+      <feDropShadow dx="0" dy="24" stdDeviation="24" flood-color="#000" flood-opacity=".24"/>
+    </filter>
+    <filter id="paper-shadow" x="-20%" y="-20%" width="140%" height="150%">
+      <feDropShadow dx="0" dy="14" stdDeviation="14" flood-color="#000" flood-opacity=".22"/>
+    </filter>
+  </defs>
+
+  <rect x="64" y="54" width="896" height="896" rx="214" fill="#20201d" filter="url(#tile-shadow)"/>
+
+  <rect x="244" y="214" width="536" height="596" rx="64" fill="#f5f2ea" filter="url(#paper-shadow)"/>
+
+  <g fill="none" stroke="#d66f4a" stroke-linecap="round" stroke-width="28">
+    <path d="M342 342h104M326 420h104"/>
+    <path d="M382 306l-34 150M458 306l-34 150"/>
+  </g>
+
+  <g fill="#4a4944">
+    <rect x="512" y="324" width="174" height="26" rx="13"/>
+    <rect x="512" y="394" width="128" height="26" rx="13" opacity=".76"/>
+    <rect x="338" y="548" width="348" height="24" rx="12" opacity=".88"/>
+    <rect x="338" y="614" width="294" height="24" rx="12" opacity=".64"/>
+    <rect x="338" y="680" width="224" height="24" rx="12" opacity=".42"/>
+  </g>
+
+  <text
+    x="588"
+    y="744"
+    fill="#d66f4a"
+    font-family="'Bradley Hand', 'Noteworthy', cursive"
+    font-size="92"
+    font-weight="700"
+    letter-spacing="-5"
+    transform="rotate(-4 650 720)"
+  >.md</text>
+</svg>

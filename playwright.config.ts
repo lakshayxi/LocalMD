@@ -5,6 +5,8 @@ export const BASE_URL = `http://localhost:${PORT}`;
 
 /** The perf spec runs in one project of its own, never in the browser matrix. */
 const PERF = /perf\.spec\.ts/;
+const DESIGN_GRAPH = /design-graph/;
+const DESKTOP = /e2e\/desktop\//;
 
 export default defineConfig({
   testDir: './e2e',
@@ -22,9 +24,21 @@ export default defineConfig({
   // The Tier 1/2 matrix from the plan. Tier 3 (mobile) is view-only and gets
   // added when there is a document surface to view.
   projects: [
-    { name: 'chromium', use: { ...devices['Desktop Chrome'] }, testIgnore: PERF },
-    { name: 'firefox', use: { ...devices['Desktop Firefox'] }, testIgnore: PERF },
-    { name: 'webkit', use: { ...devices['Desktop Safari'] }, testIgnore: PERF },
+    {
+      name: 'chromium',
+      use: { ...devices['Desktop Chrome'] },
+      testIgnore: [PERF, DESIGN_GRAPH, DESKTOP],
+    },
+    {
+      name: 'firefox',
+      use: { ...devices['Desktop Firefox'] },
+      testIgnore: [PERF, DESIGN_GRAPH, DESKTOP],
+    },
+    {
+      name: 'webkit',
+      use: { ...devices['Desktop Safari'] },
+      testIgnore: [PERF, DESIGN_GRAPH, DESKTOP],
+    },
 
     // Its own project, and Chromium only. The §16 budgets are render numbers:
     // they are not comparable between engines, three sets of them would be
@@ -33,6 +47,7 @@ export default defineConfig({
     {
       name: 'perf',
       testMatch: PERF,
+      testIgnore: [DESIGN_GRAPH, DESKTOP],
       use: { ...devices['Desktop Chrome'] },
       // A performance gate measures one foreground page at a time. Running the
       // three corpus sizes in parallel makes the 45KB row compete with the 1MB

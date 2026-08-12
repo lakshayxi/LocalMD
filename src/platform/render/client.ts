@@ -1,5 +1,11 @@
-import type { Root, RootContent } from 'hast';
-import type { BlockedResource, Heading, Language, RenderOptions } from '@/core/markdown';
+import type { Root } from 'hast';
+import type {
+  BlockedResource,
+  DocumentSlice,
+  Heading,
+  HighlightLanguage,
+  RenderOptions,
+} from '@/core/markdown';
 import type { Request, Response } from './protocol';
 
 /**
@@ -22,7 +28,7 @@ import type { Request, Response } from './protocol';
 
 /** A rendered document in the shape the app holds it: sliced, ready to mount. */
 export interface RenderedDocument {
-  slices: RootContent[][];
+  slices: DocumentSlice[];
   frontmatter: string | null;
   headings: Heading[];
   blocked: BlockedResource[];
@@ -110,7 +116,7 @@ function receive(message: Response): void {
   // underneath us; dropping it beats assembling a document out of order.
   if (!pending.document) return;
 
-  pending.document.slices.push(message.nodes);
+  pending.document.slices.push(message.slice);
   if (pending.document.slices.length < pending.expected) return;
 
   renders.delete(message.id);
@@ -136,12 +142,15 @@ export async function renderMarkdown(
     }
   }
 
-  const { renderMarkdown: render, sliceTree } = await import('@/core/markdown');
+  const { renderMarkdown: render, sliceTreeWithHashes } = await import('@/core/markdown');
   const { tree, frontmatter, headings, blocked } = await render(source, options);
-  return { slices: sliceTree(tree), frontmatter, headings, blocked };
+  return { slices: sliceTreeWithHashes(tree), frontmatter, headings, blocked };
 }
 
-export async function highlightCode(language: Language, code: string): Promise<Root | null> {
+export async function highlightCode(
+  language: HighlightLanguage,
+  code: string,
+): Promise<Root | null> {
   const active = ensureWorker();
   if (!active) return null;
 

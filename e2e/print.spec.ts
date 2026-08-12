@@ -154,8 +154,8 @@ test.describe('print', () => {
   });
 
   test('prints an unhighlighted block whole, and legibly', async ({ page }) => {
-    // The path this asserts is not an edge case. A fence with no language is
-    // never upgraded at all, and a block below the fold is upgraded only when
+    // The path this asserts is not an edge case. An ambiguous fence with no
+    // language stays plain, and a block below the fold is upgraded only when
     // `beforeprint` fires — asynchronously, through a worker the browser does
     // not wait for — so a first print of a long document puts plain code on the
     // page. That is the documented behaviour rather than a defect to design

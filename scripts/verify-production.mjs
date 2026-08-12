@@ -95,13 +95,58 @@ record('app boots', await page.getByRole('heading', { name: 'LocalMD' }).isVisib
 record('no console errors', consoleErrors.length === 0, consoleErrors[0] ?? '');
 record('loads nothing cross-origin', crossOrigin.length === 0, crossOrigin[0] ?? '');
 
-// Gate A requires the PWA to be complete or absent, never partial. A
-// half-shipped service worker is the one mistake here that is hard to undo
-// remotely, because it can pin readers to a broken build.
-const workers = await page.evaluate(async () =>
-  'serviceWorker' in navigator ? (await navigator.serviceWorker.getRegistrations()).length : 0,
-);
-record('no service worker registered', workers === 0, `${workers} found`);
+const workerReady = await page
+  .evaluate(async () => {
+    if (!('serviceWorker' in navigator)) return false;
+    await Promise.race([
+      navigator.serviceWorker.ready,
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('service worker did not become ready')), 10_000),
+      ),
+    ]);
+    return true;
+  })
+  .catch(() => false);
+record('service worker becomes ready', workerReady);
+
+if (workerReady) {
+  // A first install deliberately does not claim a tab. Reload once to enter the
+  // same controlled state a returning reader has, then prove the shell boots
+  // with the network unavailable.
+  await page.reload({ waitUntil: 'networkidle' });
+  record(
+    'page is controlled by the service worker',
+    await page.evaluate(() => navigator.serviceWorker.controller !== null),
+  );
+
+  await context.setOffline(true);
+  const offlineBoot = await page
+    .reload({ waitUntil: 'domcontentloaded' })
+    .then(() => page.getByRole('heading', { name: 'LocalMD' }).isVisible())
+    .catch(() => false);
+  record('app shell reloads offline', offlineBoot);
+
+  if (offlineBoot) {
+    const offlineDocument = await page
+      .getByRole('button', { name: 'Paste' })
+      .click()
+      .then(() => page.getByLabel('Markdown to read').fill('# Offline check\n\nStill local.'))
+      .then(() => page.getByRole('button', { name: 'Read it' }).click())
+      .then(() => page.getByRole('heading', { name: 'Offline check' }).isVisible())
+      .catch(() => false);
+    record('renders a document offline', offlineDocument);
+
+    const offlineEditor = offlineDocument
+      ? await page
+          .getByRole('button', { name: 'Edit', exact: true })
+          .click()
+          .then(() => page.locator('.cm-editor').isVisible())
+          .catch(() => false)
+      : false;
+    record('loads the editor offline', offlineEditor);
+  }
+  await context.setOffline(false);
+}
 
 // The three surfaces a reader needs when something looks wrong. They live in
 // the header on every screen, so losing one is a silent regression: the app

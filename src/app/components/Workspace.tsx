@@ -2,6 +2,7 @@ import { Document, HighlightProvider } from '@/render';
 import { EditorSurface } from '../editor-loader';
 import { highlightCode } from '../pipeline-loader';
 import { useDocument } from '../store';
+import { FastModeNotice } from './FastModeNotice';
 import { Outline } from './Outline';
 import { RemoteContentNotice } from './RemoteContentNotice';
 
@@ -19,42 +20,65 @@ import { RemoteContentNotice } from './RemoteContentNotice';
  * version worth having. Shipping the lying one first would be harder to remove
  * than to never add.
  */
-export function Workspace({ onRendered }: { onRendered: () => void }) {
-  const mode = useDocument((s) => s.mode);
-  const rendered = useDocument((s) => s.rendered);
+export function DocumentEditorSurface() {
   const source = useDocument((s) => s.source);
   const updateText = useDocument((s) => s.updateText);
 
-  // Read rather than subscribed: this is the editor's *initial* document, and
-  // subscribing would re-render this component on every keystroke — exactly the
-  // cost the editor is built to avoid.
+  // Read rather than subscribed: this is the editor's initial document, and
+  // subscribing would re-render this component on every keystroke.
   const text = useDocument.getState().text;
 
-  if (!rendered) return null;
-
-  const editor = (
+  return (
     <EditorSurface
       doc={text}
-      // Keyed to the document, so moving between Edit and Split keeps the
-      // editor's history and cursor rather than rebuilding it underneath you.
       docId={source?.id ?? 'untitled'}
       onChange={updateText}
       ariaLabel={`Markdown source of ${source?.name ?? 'the document'}`}
       autoFocus
     />
   );
+}
 
-  const preview = (
+export function DocumentPreviewSurface({
+  onRendered,
+  showOutline = false,
+  canLoadRemoteContent = true,
+}: {
+  onRendered: () => void;
+  showOutline?: boolean;
+  canLoadRemoteContent?: boolean;
+}) {
+  const rendered = useDocument((s) => s.rendered);
+  const fastMode = useDocument((s) => s.fastMode);
+  const source = useDocument((s) => s.source);
+
+  if (!rendered) return null;
+
+  return (
     <>
-      <RemoteContentNotice />
+      {showOutline && <Outline />}
+      <FastModeNotice />
+      <RemoteContentNotice canLoadRemoteContent={canLoadRemoteContent} />
       {/* The renderer decides *when* a block is worth highlighting; who does
           the work is supplied here, because it runs in the worker and
           src/render may not reach into src/platform. */}
       <HighlightProvider highlight={highlightCode}>
-        <Document slices={rendered.slices} onComplete={onRendered} />
+        <Document
+          key={source?.id ?? 'untitled'}
+          slices={rendered.slices}
+          enhance={!fastMode}
+          onComplete={onRendered}
+        />
       </HighlightProvider>
     </>
   );
+}
+
+export function Workspace({ onRendered }: { onRendered: () => void }) {
+  const mode = useDocument((s) => s.mode);
+
+  const editor = <DocumentEditorSurface />;
+  const preview = <DocumentPreviewSurface onRendered={onRendered} />;
 
   if (mode === 'edit') return editor;
 
@@ -72,8 +96,7 @@ export function Workspace({ onRendered }: { onRendered: () => void }) {
 
   return (
     <>
-      <Outline />
-      {preview}
+      <DocumentPreviewSurface onRendered={onRendered} showOutline />
     </>
   );
 }

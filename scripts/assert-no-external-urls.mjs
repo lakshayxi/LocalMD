@@ -14,7 +14,7 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { extname, join, relative } from 'node:path';
 
-const DIST = 'dist';
+const DIST = process.argv[2] ?? 'dist';
 const TEXT_EXTENSIONS = new Set(['.js', '.mjs', '.css', '.html', '.json', '.webmanifest', '.map']);
 
 /**
@@ -54,6 +54,12 @@ const ALLOWED = [
     why:
       'Ours. Used as the base URL for parsing image hosts in core/markdown/plugins/images.ts. ' +
       '.invalid is reserved by RFC 2606 and can never resolve, which is why it was chosen.',
+  },
+  {
+    prefix: 'https://bit.ly/wb-precache',
+    why:
+      'Workbox embeds this help link in a precache warning string. The generated worker never ' +
+      'fetches it; production precache entries all include revisions or content hashes.',
   },
 
   // Ours, and the only outbound links in the application. They are `href`

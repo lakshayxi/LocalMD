@@ -1,0 +1,238 @@
+@import '../tokens.css';
+@import '../typography.css';
+@import '../motion.css';
+
+/* The selectors include the shell scope so importing this file cannot restyle
+   browser controls or rendered Markdown. */
+
+[data-lmd-shell='desktop'] .lmd-desktop-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--lmd-desktop-space-3);
+  min-height: var(--lmd-desktop-control-height);
+  padding: 0 var(--lmd-desktop-space-4);
+  border: 1px solid transparent;
+  border-radius: var(--lmd-desktop-radius-control);
+  background: transparent;
+  color: var(--lmd-desktop-text-muted);
+  font: inherit;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: default;
+  transition:
+    color var(--lmd-desktop-motion-fast) var(--lmd-desktop-ease-out),
+    background-color var(--lmd-desktop-motion-fast) var(--lmd-desktop-ease-out),
+    border-color var(--lmd-desktop-motion-fast) var(--lmd-desktop-ease-out);
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+[data-lmd-shell='desktop'] .lmd-desktop-button[data-variant='bordered'] {
+  border-color: var(--lmd-desktop-separator-strong);
+  background: var(--lmd-desktop-raised);
+  color: var(--lmd-desktop-text);
+}
+
+[data-lmd-shell='desktop'] .lmd-desktop-button[data-variant='primary'] {
+  border-color: var(--lmd-desktop-accent);
+  background: var(--lmd-desktop-accent);
+  color: var(--lmd-desktop-sidebar);
+}
+
+[data-lmd-shell='desktop'] .lmd-desktop-button:hover:not(:disabled) {
+  border-color: var(--lmd-desktop-separator);
+  background: var(--lmd-desktop-selection);
+  color: var(--lmd-desktop-text);
+}
+
+[data-lmd-shell='desktop'] .lmd-desktop-button[data-variant='primary']:hover:not(:disabled) {
+  border-color: var(--lmd-desktop-accent);
+  background: color-mix(in srgb, var(--lmd-desktop-accent) 90%, var(--lmd-desktop-text));
+  color: var(--lmd-desktop-sidebar);
+}
+
+[data-lmd-shell='desktop'] .lmd-desktop-button:active:not(:disabled),
+[data-lmd-shell='desktop'] .lmd-desktop-button[aria-pressed='true'] {
+  border-color: var(--lmd-desktop-separator-strong);
+  background: color-mix(in srgb, var(--lmd-desktop-selection) 82%, var(--lmd-desktop-accent));
+  color: var(--lmd-desktop-text);
+}
+
+[data-lmd-shell='desktop'] .lmd-desktop-button:focus-visible,
+[data-lmd-shell='desktop'] .lmd-desktop-segment:focus-visible,
+[data-lmd-shell='desktop'] .lmd-desktop-sidebar-item:focus-visible {
+  outline: 0;
+  box-shadow: var(--lmd-desktop-focus-ring);
+  position: relative;
+  z-index: 1;
+}
+
+[data-lmd-shell='desktop'] .lmd-desktop-button:disabled,
+[data-lmd-shell='desktop'] .lmd-desktop-segment:disabled,
+[data-lmd-shell='desktop'] .lmd-desktop-sidebar-item:disabled {
+  opacity: 0.46;
+  cursor: default;
+}
+
+[data-lmd-shell='desktop'] .lmd-desktop-icon-button {
+  width: var(--lmd-desktop-control-height);
+  padding: 0;
+}
+
+[data-lmd-shell='desktop'] .lmd-desktop-icon-button-glyph {
+  display: inline-flex;
+  width: var(--lmd-desktop-icon-md);
+  height: var(--lmd-desktop-icon-md);
+  align-items: center;
+  justify-content: center;
+}
+
+[data-lmd-shell='desktop'] .lmd-desktop-icon-button-glyph :is(svg, img) {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+[data-lmd-shell='desktop'] .lmd-desktop-segmented-control {
+  display: inline-flex;
+  gap: 1px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--lmd-desktop-radius-control);
+  background: transparent;
+}
+
+[data-lmd-shell='desktop'] .lmd-desktop-segment {
+  position: relative;
+  min-height: calc(var(--lmd-desktop-control-height) - 4px);
+  padding: 0 var(--lmd-desktop-space-4);
+  border: 0;
+  border-radius: calc(var(--lmd-desktop-radius-control) - 2px);
+  background: transparent;
+  color: var(--lmd-desktop-text-muted);
+  font: inherit;
+  font-size: var(--lmd-desktop-type-ui);
+  line-height: 1;
+  cursor: default;
+  transition:
+    color var(--lmd-desktop-motion-fast) var(--lmd-desktop-ease-out),
+    background-color var(--lmd-desktop-motion-fast) var(--lmd-desktop-ease-out),
+    box-shadow var(--lmd-desktop-motion-fast) var(--lmd-desktop-ease-out);
+}
+
+[data-lmd-shell='desktop'] .lmd-desktop-segment:hover:not(:disabled) {
+  color: var(--lmd-desktop-text);
+}
+
+[data-lmd-shell='desktop'] .lmd-desktop-segment:active:not(:disabled) {
+  background: color-mix(in srgb, var(--lmd-desktop-selection) 78%, transparent);
+}
+
+[data-lmd-shell='desktop'] .lmd-desktop-segment[aria-pressed='true'] {
+  background: transparent;
+  box-shadow: none;
+  color: var(--lmd-desktop-text);
+}
+
+[data-lmd-shell='desktop'] .lmd-desktop-segment[aria-pressed='true']::after {
+  position: absolute;
+  right: var(--lmd-desktop-space-4);
+  bottom: 0;
+  left: var(--lmd-desktop-space-4);
+  height: 2px;
+  border-radius: 2px 2px 0 0;
+  background: currentColor;
+  content: '';
+}
+
+[data-lmd-shell='desktop'] .lmd-desktop-sidebar-item {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--lmd-desktop-space-3);
+  width: 100%;
+  min-height: var(--lmd-desktop-sidebar-row-height);
+  padding: 0 var(--lmd-desktop-space-4);
+  overflow: hidden;
+  border: 0;
+  border-radius: var(--lmd-desktop-radius-navigation);
+  background: transparent;
+  color: var(--lmd-desktop-text-muted);
+  font: inherit;
+  font-size: 0.875rem;
+  text-align: left;
+  cursor: default;
+  transition:
+    color var(--lmd-desktop-motion-fast) var(--lmd-desktop-ease-out),
+    background-color var(--lmd-desktop-motion-fast) var(--lmd-desktop-ease-out);
+}
+
+[data-lmd-shell='desktop'] .lmd-desktop-sidebar-item:hover:not(:disabled) {
+  background: var(--lmd-desktop-hover);
+  color: var(--lmd-desktop-text);
+}
+
+[data-lmd-shell='desktop'] .lmd-desktop-sidebar-item:active:not(:disabled) {
+  background: var(--lmd-desktop-pressed);
+}
+
+[data-lmd-shell='desktop'] .lmd-desktop-sidebar-item[aria-current='page'] {
+  background: var(--lmd-desktop-selection);
+  color: var(--lmd-desktop-text);
+}
+
+[data-lmd-shell='desktop'] .lmd-desktop-sidebar-icon {
+  display: inline-flex;
+  width: var(--lmd-desktop-icon-sm);
+  height: var(--lmd-desktop-icon-sm);
+  align-items: center;
+  justify-content: center;
+  color: var(--lmd-desktop-text-subtle);
+}
+
+[data-lmd-shell='desktop'] .lmd-desktop-sidebar-icon :is(svg, img) {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+[data-lmd-shell='desktop'] .lmd-desktop-sidebar-copy {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: var(--lmd-desktop-space-4);
+}
+
+[data-lmd-shell='desktop'] .lmd-desktop-sidebar-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+[data-lmd-shell='desktop'] .lmd-desktop-sidebar-meta {
+  flex: none;
+  color: var(--lmd-desktop-text-muted);
+  font-size: var(--lmd-desktop-type-caption);
+}
+
+[data-lmd-shell='desktop'] .lmd-desktop-sidebar-dirty {
+  width: 0.375rem;
+  height: 0.375rem;
+  border-radius: 50%;
+  background: var(--lmd-desktop-warning);
+}
+
+[data-lmd-shell='desktop'] .lmd-desktop-sidebar-status {
+  color: var(--lmd-desktop-warning);
+  font-size: 0.625rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+[data-lmd-shell='desktop'] .lmd-desktop-sidebar-item[data-missing='true'] {
+  color: var(--lmd-desktop-text-subtle);
+}
