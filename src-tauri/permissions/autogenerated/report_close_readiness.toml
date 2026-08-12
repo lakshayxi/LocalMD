@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-report-close-readiness"
+description = "Enables the report_close_readiness command without any pre-configured scope."
+commands.allow = ["report_close_readiness"]
+
+[[permission]]
+identifier = "deny-report-close-readiness"
+description = "Denies the report_close_readiness command without any pre-configured scope."
+commands.deny = ["report_close_readiness"]

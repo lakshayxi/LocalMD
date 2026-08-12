@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type {
   DocumentContents,
@@ -327,7 +327,7 @@ describe('asynchronous document ownership', () => {
     await useDocument.getState().open(second);
     expect(first.disposed).toBe(1);
 
-    useDocument.getState().close();
+    await useDocument.getState().close();
     expect(second.disposed).toBe(1);
   });
 
@@ -441,6 +441,116 @@ describe('asynchronous document ownership', () => {
     await checking;
 
     expect(useDocument.getState().externalChange).toBe(true);
+  });
+});
+
+describe('discardForClose', () => {
+  it('clears dirty and deletes the draft without asking', async () => {
+    const source = new DeferredSaveSource('notes.md');
+    await useDocument.getState().open(source);
+    useDocument.getState().updateText('unsaved\n');
+    useDocument.getState().flushDraft();
+    const draftId = useDocument.getState().draftId;
+    expect(draftId).not.toBeNull();
+
+    await useDocument.getState().discardForClose();
+
+    expect(useDocument.getState()).toMatchObject({ dirty: false, draftId: null });
+    expect(persistence.discardDraft).toHaveBeenCalledWith(draftId);
+    // The native alert this answers is already the confirmation - a second
+    // one here would ask the reader to confirm their own answer.
+    expect(window.confirm).not.toHaveBeenCalled();
+  });
+
+  it('is a no-op on the draft store when nothing was ever flushed', async () => {
+    const source = new DeferredSaveSource('notes.md');
+    await useDocument.getState().open(source);
+    useDocument.getState().updateText('unsaved\n');
+    expect(useDocument.getState().draftId).toBeNull();
+
+    await useDocument.getState().discardForClose();
+
+    expect(useDocument.getState().dirty).toBe(false);
+    expect(persistence.discardDraft).not.toHaveBeenCalled();
+  });
+
+  it('cancels a pending idle flush so the discarded text is never written back', async () => {
+    vi.useFakeTimers();
+    try {
+      const source = new DeferredSaveSource('notes.md');
+      await useDocument.getState().open(source);
+      useDocument.getState().updateText('about to be discarded\n');
+
+      await useDocument.getState().discardForClose();
+      await vi.advanceTimersByTimeAsync(5_000);
+
+      expect(persistence.saveDraft).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe('confirmDiscard against an async confirm', () => {
+  // Regression coverage for the desktop build specifically: Tauri's dialog
+  // plugin replaces `window.confirm` with an async function on init (there is
+  // no synchronous IPC), so the DOM lib's `() => boolean` signature does not
+  // hold there. A mock that only ever returns a plain boolean, like the
+  // module-level one this file otherwise uses, cannot catch a regression
+  // where a call site reads the return value without awaiting it — `!Promise`
+  // is always false, so a real "Cancel" would silently be read as "OK" and
+  // every open/close/reload guard in this file would stop protecting
+  // anything on desktop. Each test here overrides the mock to return a
+  // Promise, matching that shape, and restores it afterward.
+  afterEach(() => {
+    vi.mocked(window.confirm).mockReturnValue(true);
+  });
+
+  it('does not replace the document when an async confirm resolves to false', async () => {
+    const first = new DeferredSaveSource('first.md');
+    const second = new DeferredSaveSource('second.md', 'second\n');
+    await useDocument.getState().open(first);
+    useDocument.getState().updateText('unsaved\n');
+
+    vi.mocked(window.confirm).mockImplementation(
+      () => Promise.resolve(false) as unknown as boolean,
+    );
+
+    await useDocument.getState().open(second);
+
+    expect(useDocument.getState().source).toBe(first);
+    expect(first.disposed).toBe(0);
+  });
+
+  it('replaces the document once an async confirm resolves to true', async () => {
+    const first = new DeferredSaveSource('first.md');
+    const second = new DeferredSaveSource('second.md', 'second\n');
+    await useDocument.getState().open(first);
+    useDocument.getState().updateText('unsaved\n');
+
+    vi.mocked(window.confirm).mockImplementation(
+      () => Promise.resolve(true) as unknown as boolean,
+    );
+
+    await useDocument.getState().open(second);
+
+    expect(useDocument.getState().source).toBe(second);
+    expect(first.disposed).toBe(1);
+  });
+
+  it('keeps a dirty document open when close is answered false asynchronously', async () => {
+    const source = new DeferredSaveSource('notes.md');
+    await useDocument.getState().open(source);
+    useDocument.getState().updateText('unsaved\n');
+
+    vi.mocked(window.confirm).mockImplementation(
+      () => Promise.resolve(false) as unknown as boolean,
+    );
+
+    await useDocument.getState().close();
+
+    expect(useDocument.getState().source).toBe(source);
+    expect(source.disposed).toBe(0);
   });
 });
 

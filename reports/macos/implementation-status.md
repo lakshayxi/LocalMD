@@ -1,6 +1,6 @@
 # macOS implementation status
 
-**Milestone:** H - Local packaging validation
+**Milestone:** I - Unsigned public beta readiness
 **Date:** 2026-08-13
 **Branch:** `macos`
 
@@ -38,6 +38,16 @@ Latest verification: 2026-08-13.
 - Browser Save rechecks modification time and size after its permission prompt. Ordinary Save refuses to recreate a missing original.
 - The desktop checks file metadata when its window regains focus and presents the existing conflict flow.
 - The browser distribution remains a separate first-class build target.
+- Native window close and application quit protect unsaved work. The red close button, Command-W, Command-Q, and the Dock or menu-bar Quit item all funnel through one Rust-owned lifecycle protocol.
+- A clean document closes immediately. A dirty one gets a native macOS alert with `Save`, `Don't Save`, and `Cancel`.
+- `Save` runs the same store save (or Save As, for an untitled document) every other save path uses. It closes only once that clears the dirty bit. A cancelled picker, a conflict, or an edit that lands mid-save all keep the application open instead.
+- `Don't Save` clears the dirty bit and discards the recovery draft for real. It does not leave the draft for the next launch to offer back.
+- `Cancel` leaves the document exactly as it was.
+- A coordinator flag in Rust makes a second close signal arriving mid-flow a no-op. A double Command-W, or Command-Q while the alert is still open, cannot open a second dialog.
+- Fixed a pre-existing correctness bug found during this pass. `confirmDiscard` is the in-app guard behind Open, New, Save As adoption, restoring a draft, reloading from disk, and Close Document. It read `window.confirm(...)` synchronously.
+- The dialog plugin the desktop build already depends on for its file pickers replaces `window.confirm` with an async function on init. `!window.confirm(...)` therefore always read a truthy `Promise`, and the "Cancel" branch was never taken. Every one of those guards silently discarded unsaved work in the packaged desktop app, regardless of the reader's answer.
+- `confirmDiscard` and its call sites now await the result. That is correct in both the browser, where `confirm` returns a plain boolean, and the desktop build, where it returns a real `Promise<boolean>`.
+- Covered by `test/app/store-ownership.test.ts`'s `confirmDiscard against an async confirm` suite. It mocks `window.confirm` as async to reproduce the exact shape that hid the bug.
 
 ## Native verification
 
@@ -64,6 +74,26 @@ On 2026-08-13, we launched the exact rebuilt application binary to avoid a stale
 We also launched the final release-mode application bundle. Its accessibility tree exposed the production Tauri root, native window controls, desktop commands, appearance control, and document shell.
 
 We removed the two disposable files after verification.
+
+## Close and quit verification
+
+We drove the final release bundle directly, from outside the automated suites, to verify the native lifecycle protocol end to end.
+
+- **Clean quit.** With no document open, Command-Q closed the application immediately. The process exited within about a second, with no dialog. This exercised the real `RunEvent::ExitRequested` path, not a mock.
+- **Dirty close.** We opened a disposable file, edited it in Edit mode, and pressed Command-W. The native alert appeared with the exact title and message the Rust code sends — `Do you want to save the changes you made?` / `This document has unsaved changes. Your changes will be lost if you don't save them.` — and `Save`, `Don't Save`, and `Cancel` in that order, `Save` as the default button.
+- **Cancel.** Choosing Cancel left the document open with the edit and the dirty marker intact. The application kept running.
+
+This ran against a real Apple Silicon release build. It launched outside Xcode or any test harness — not a debug build, and not a mock of the dialog plugin.
+
+### Gatekeeper behavior on the unsigned build
+
+We also verified, directly, what a reader sees when the disk image counts as downloaded.
+
+- `syspolicyd` killed a quarantined copy of the release `.app` on every launch attempt, whether through `open` or a real Finder double-click. The unified log confirmed the reason each time: `Terminating process due to Gatekeeper rejection`. The kill is asynchronous — the process can run for several seconds, sometimes over a minute, before macOS ends it. A launch that briefly appears to succeed is not evidence Gatekeeper let it through.
+- The dialog macOS shows is `"LocalMD" is damaged and can't be opened. You should move it to the Trash.` We checked System Settings → Privacy & Security right after a fresh rejection. One rejection came from an actual Finder double-click, not a script. No "Open Anyway" button appeared either way. Current macOS treats a purely ad hoc-signed binary — no Developer ID identity, no CMS blob — differently from the signed-but-unnotarized case most Gatekeeper guides describe.
+- A copy made without the quarantine attribute launched immediately, with no Gatekeeper interference, no App Translocation, and no delayed kill, confirmed by log inspection. That is the state `curl` leaves a file in, since it never applies quarantine the way a browser download does.
+
+This changed the distribution guidance. `reports/macos/distribution.md` now recommends `curl` as the primary install path. It documents `xattr -dr com.apple.quarantine` as the browser-download recovery step, rather than assuming "Open Anyway" is available.
 
 ## Visual verification
 
@@ -109,15 +139,19 @@ stat_document
 save_document
 save_document_as
 close_document
+report_close_readiness
+complete_close_flow
 ```
 
-The capability does not grant frontend `fs:*`, `dialog:*`, or `core:default` permissions. The Rust backend owns the native dialogs and filesystem operations.
+It also grants `core:event:allow-listen` and `core:event:allow-unlisten`, added for the close/quit lifecycle protocol: Rust emits the close-check, save, and discard signals, and the frontend listens for them. Neither permission lets the frontend emit an event Rust would act on; it can only receive the three Rust already chooses to send.
 
-The desktop CSP permits bundled content and Tauri IPC. It does not permit remote image sources, and the desktop UI does not offer the browser-only remote-image action. This differs from the browser deployment's response-header CSP. The desktop privacy boundary depends on bundled code, six narrow commands, and the opaque file registry.
+The capability does not grant frontend `fs:*`, `dialog:*`, or `core:default` permissions. The Rust backend owns the native dialogs and filesystem operations, including the close/quit alert itself — the frontend never gets a `dialog:*` permission to show one.
+
+The desktop CSP permits bundled content and Tauri IPC. It does not permit remote image sources, and the desktop UI does not offer the browser-only remote-image action. This differs from the browser deployment's response-header CSP. The desktop privacy boundary depends on bundled code, eight narrow commands, two narrow event permissions, and the opaque file registry.
 
 ## Verified commands
 
-The following commands passed on 2026-08-12:
+The following commands passed on 2026-08-13, after the close/quit protocol and the `confirmDiscard` fix:
 
 ```sh
 npm run typecheck
@@ -125,39 +159,32 @@ npm run lint
 npm test
 npm run build
 npm run build:desktop
-npm run test:desktop -- --update-snapshots
-npm run test:design -- --update-snapshots
-python3 /Users/shay/.codex/plugins/cache/personal/plain-technical-docs/0.1.0/scripts/ste_lint.py design-qa.md reports/macos/design-system.md reports/macos/implementation-status.md
-npx playwright test e2e/editor.spec.ts e2e/save.spec.ts e2e/a11y.spec.ts --project=chromium
-npx playwright test e2e/reading.spec.ts e2e/print.spec.ts e2e/navigate.spec.ts --project=chromium
+npm run test:desktop
+npm run test:design
+npm run e2e
+python3 /Users/shay/.codex/plugins/cache/personal/plain-technical-docs/0.1.0/scripts/ste_lint.py design-qa.md reports/macos/design-system.md reports/macos/implementation-status.md reports/macos/distribution.md
 cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
 cargo test --manifest-path src-tauri/Cargo.toml
 npm run tauri -- permission list
-npm run tauri -- build --debug --bundles app
 npm run desktop:build -- --target aarch64-apple-darwin
 hdiutil verify src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/LocalMD_0.2.0_aarch64.dmg
+git diff --check
 ```
 
 Results:
 
-- 276 unit tests passed.
+- 282 unit tests passed, including the new close/quit store coverage and the `confirmDiscard against an async confirm` regression suite.
 - 15 desktop production tests passed.
 - 18 design graph tests passed, including 10 accessibility fixtures.
-- 34 focused reading, print, and navigation browser tests passed.
-- 32 relevant Chromium browser tests passed.
 - The complete Chromium, Firefox, and WebKit matrix completed 321 tests with no failures. It passed 290 tests with 31 intentional capability skips.
-- Their existing feature condition skipped 5 download-fallback browser tests.
-- 8 Rust native document tests passed.
-- Browser and desktop production builds passed their external-URL and artifact checks.
-- The final Apple Silicon debug application build completed successfully.
-- The release-mode Apple Silicon application and disk image builds completed successfully.
-- The disk image passed `hdiutil verify` and has SHA-256 `97bfa0ec8b4569eeea5af55045c2e9ccdfff349a3cc88a047fad4492c3726391`.
+- 10 Rust tests passed, including the two new `CloseCoordinator` state-machine tests.
+- Browser and desktop production builds passed their external-URL and artifact checks, including the desktop-only assertion that the build excludes service workers and design fixtures.
+- The release-mode Apple Silicon application and disk image builds completed successfully from a clean build.
+- The disk image passed `hdiutil verify` and has SHA-256 `7d4f0ddcf2dfaeb3302f26963d1198de3f69556fa31afe6a29c9025e0323856f`. This supersedes the earlier `97bfa0ec...` checksum recorded before the close/quit work; the binary changed, so the checksum changed with it.
 - The release application reports version 0.2.0, bundle identifier `com.lakshayxi.localmd`, minimum macOS 12.0, and an arm64 executable.
-- The rebuilt native window completed the Command-F and automatic code-detection smoke flow.
-- The macOS Open panel opened from the final isolated native QA build.
-- The final native Edit view loaded the real CodeMirror textbox after its visible loading state.
-- The final native Split view used the reduced preview heading scale.
-- The focused Markdown reports passed the plain technical English linter.
+- The packaged application's icon is present at `Contents/Resources/icon.icns`.
+- `git diff --check` reported no whitespace errors.
+- The focused Markdown reports, including the rewritten distribution report, passed the plain technical English linter.
 
 The debug application path is:
 
@@ -172,7 +199,7 @@ src-tauri/target/aarch64-apple-darwin/release/bundle/macos/LocalMD.app
 src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/LocalMD_0.2.0_aarch64.dmg
 ```
 
-These artifacts are not public-ready. This Mac has no Developer ID identity or Apple notarization credentials. Gatekeeper rejects the application, and strict bundle signature verification fails because the binary has only its linker-generated ad hoc signature.
+These artifacts are ready for the v0.2.0 unsigned public beta. This Mac has no Developer ID identity or Apple notarization credentials. The binary carries only its linker-generated ad hoc signature. `spctl` assessment fails on that basis alone. Every build this project produces does this, until a Developer ID exists. That failure does not block distribution. See `reports/macos/distribution.md` for what it means to someone installing the app. See "Close and quit verification" above for what we confirmed about Gatekeeper's real behavior against this exact build.
 
 ## Incomplete and limitations
 
@@ -180,8 +207,8 @@ These artifacts are not public-ready. This Mac has no Developer ID identity or A
 - Native application menu commands are not implemented. The current File menu is the default Tauri menu.
 - Native recents and durable native file references are not implemented. The sidebar shows the active document for the current session, while browser handle persistence remains browser-only.
 - Rust revokes opaque native document identifiers when the user replaces or closes a document.
-- Native close and quit protection are not implemented.
 - Drag and drop does not yet establish native file ownership.
+- Cmd+W and the red close button quit the whole application rather than closing to an empty state, matching LocalMD's single-window design. Reopening from the Dock without a window is not implemented and is out of scope for this milestone.
 - External-change polling uses metadata for the early warning. Save performs the stronger size, modification-time, and SHA-256 comparison.
 - Save uses conflict preflight followed by same-directory atomic replacement. Another process can still replace the file in the narrow interval between the final comparison and rename.
 - Atomic replacement preserves macOS extended attributes, Finder tags, ACLs, permissions, and ownership where macOS permits.
@@ -194,4 +221,4 @@ These artifacts are not public-ready. This Mac has no Developer ID identity or A
 
 ## Next milestone
 
-Add native close and quit protection before a public release. Then add Developer ID signing and notarization. Handle Finder integration, native menus, and native recents as separate incremental changes.
+v0.2.0 is ready to publish as an unsigned Apple Silicon beta. It waits on the maintainer's explicit go-ahead to merge, tag, and upload the release asset. After that, add Developer ID signing and notarization. Handle Finder integration, native menus, and native recents as separate incremental changes.

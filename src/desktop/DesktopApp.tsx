@@ -14,6 +14,7 @@ import { useNavigationGuard } from '@/app/use-navigation-guard';
 import { DesktopCommandPalette, type DesktopCommand } from './DesktopCommandPalette';
 import { DesktopShell, type DesktopMode } from './DesktopShell';
 import { useDocumentFind } from './use-document-find';
+import { useNativeLifecycle } from './use-native-lifecycle';
 
 export interface DesktopActions {
   openAvailable: boolean;
@@ -89,6 +90,7 @@ export function DesktopApp({ actions = bootstrapActions }: { actions?: DesktopAc
 
   useNavigationGuard();
   useExternalChange();
+  useNativeLifecycle();
 
   useEffect(() => {
     void hydrate();
@@ -235,7 +237,7 @@ export function DesktopApp({ actions = bootstrapActions }: { actions?: DesktopAc
         label: 'Close document',
         group: 'File',
         disabled: !source,
-        onRun: close,
+        onRun: () => void close(),
       },
     ];
 

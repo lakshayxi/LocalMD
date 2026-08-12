@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-complete-close-flow"
+description = "Enables the complete_close_flow command without any pre-configured scope."
+commands.allow = ["complete_close_flow"]
+
+[[permission]]
+identifier = "deny-complete-close-flow"
+description = "Denies the complete_close_flow command without any pre-configured scope."
+commands.deny = ["complete_close_flow"]

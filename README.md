@@ -18,10 +18,14 @@ sends your document anywhere. No uploads, no accounts, no document backend.
 > evidence and the known limitations.
 > [Tell us what's broken](https://github.com/lakshayxi/LocalMD/issues).
 
-> **macOS status: 0.2.0 development build.** The `macos` branch adds a Tauri 2
-> application with native Open, Save, and Save As. Local Apple Silicon `.app`
-> and `.dmg` builds work. Public downloads remain blocked on Developer ID
-> signing, Apple notarization, and close or quit protection.
+> **macOS status: 0.2.0 unsigned beta.** The `macos` branch adds a Tauri 2
+> application. It has native Open, Save, Save As, and close/quit protection
+> for unsaved work. Apple Silicon `.app` and `.dmg` builds work and are ready
+> for an unsigned public beta through GitHub Releases. This project has no
+> Apple Developer Program membership yet. Because of this, macOS Gatekeeper
+> blocks the first launch until you approve it once. Read
+> [reports/macos/distribution.md](reports/macos/distribution.md) for the
+> install steps.
 
 The privacy claim is verified against the live deployment on every release —
 see [reports/gate-a-production.md](reports/gate-a-production.md) for the
@@ -147,13 +151,19 @@ npm run dev
 
 ### macOS distribution
 
-The first public macOS release will use a signed and notarized GitHub Release
-disk image. Homebrew will install the same disk image through a Cask with a
-fixed SHA-256 checksum. A direct `curl` command can download that release asset.
+v0.2.0 distributes as an unsigned, not-notarized disk image through GitHub
+Releases. Download it with `curl`, not a browser. `curl` never applies the
+quarantine flag a browser download does, so Gatekeeper never blocks the
+first launch. A browser download also works. But current macOS answers this
+ad hoc-signed build with a "damaged, move to Trash" warning, not an "Open
+Anyway" button. The warning is misleading. The app is not damaged. Run
+`xattr -dr com.apple.quarantine` on the installed app to clear it. Signed
+and notarized releases, and a Homebrew Cask, wait on an Apple Developer
+Program membership for this project.
 
-Do not use the current local disk image as a public download. Read the complete
-[macOS distribution procedure](reports/macos/distribution.md) for signing,
-notarization, GitHub Release, `curl`, and Homebrew details.
+Read the complete [macOS distribution procedure](reports/macos/distribution.md)
+for the install steps, what signing and notarization actually change, and the
+deferred signed-release path.
 
 ### Releasing
 

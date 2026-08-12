@@ -10,8 +10,10 @@ use std::{
 };
 #[cfg(target_os = "macos")]
 use std::{os::fd::AsRawFd, os::unix::fs::MetadataExt, ptr};
-use tauri::{AppHandle, State};
-use tauri_plugin_dialog::DialogExt;
+use tauri::{AppHandle, Emitter, Manager, RunEvent, State, WindowEvent};
+use tauri_plugin_dialog::{
+    DialogExt, MessageDialogButtons, MessageDialogKind, MessageDialogResult,
+};
 use tempfile::NamedTempFile;
 use uuid::Uuid;
 
@@ -36,6 +38,62 @@ struct OpenDocument {
 
 #[derive(Default)]
 struct DocumentRegistry(Mutex<HashMap<String, OpenDocument>>);
+
+const CLOSE_CHECK_EVENT: &str = "lifecycle-close-check";
+const CLOSE_SAVE_EVENT: &str = "lifecycle-close-save";
+const CLOSE_DISCARD_EVENT: &str = "lifecycle-close-discard";
+const CLOSE_SAVE_LABEL: &str = "Save";
+const CLOSE_DONT_SAVE_LABEL: &str = "Don't Save";
+const CLOSE_CANCEL_LABEL: &str = "Cancel";
+
+// Owns the single lifecycle protocol every native close/quit path shares: the
+// red window-close button, Cmd+W (the default menu's Close Window item),
+// Cmd+Q, and the Dock/menu-bar Quit item. macOS delivers those as two
+// independent Tauri signals (WindowEvent::CloseRequested and
+// RunEvent::ExitRequested), so both funnel through request_close.
+//
+// The document's dirty bit lives in the frontend store, not here, so Rust
+// cannot decide the outcome on its own. It asks the frontend, shows the
+// native alert only if the answer is dirty, and the frontend performs the
+// save or discard itself through the same store methods every other save
+// path uses. This flag is the only state Rust keeps: it makes a second close
+// signal arriving mid-flow (a double Cmd+W, or Cmd+Q while the alert is
+// still up) a no-op instead of a second dialog or a second save.
+#[derive(Default)]
+struct CloseCoordinator(Mutex<bool>);
+
+impl CloseCoordinator {
+    // Returns true if this call started the flow. False means one is
+    // already running and the caller must not start another.
+    fn begin(&self) -> bool {
+        let mut in_progress = self.0.lock().unwrap();
+        if *in_progress {
+            return false;
+        }
+        *in_progress = true;
+        true
+    }
+
+    fn end(&self) {
+        *self.0.lock().unwrap() = false;
+    }
+}
+
+fn request_close(app: &AppHandle, coordinator: &CloseCoordinator) {
+    if !coordinator.begin() {
+        return;
+    }
+    let _ = app.emit(CLOSE_CHECK_EVENT, ());
+}
+
+fn finish_close(app: &AppHandle, coordinator: &CloseCoordinator) {
+    coordinator.end();
+    app.exit(0);
+}
+
+fn cancel_close(coordinator: &CloseCoordinator) {
+    coordinator.end();
+}
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -340,6 +398,81 @@ async fn close_document(
     Ok(())
 }
 
+// The frontend's answer to CLOSE_CHECK_EVENT: is the document dirty?
+//
+// A clean document closes immediately. A dirty one gets the native
+// Save / Don't Save / Cancel alert. The alert runs off this command's own
+// async task (show_with_result's callback fires on its own thread), so this
+// command returns right away - the alert's outcome comes back later through
+// CLOSE_SAVE_EVENT / CLOSE_DISCARD_EVENT or, for Cancel, by ending the
+// coordinator directly.
+#[tauri::command]
+async fn report_close_readiness(
+    app: AppHandle,
+    dirty: bool,
+    coordinator: State<'_, Arc<CloseCoordinator>>,
+) -> Result<(), String> {
+    if !dirty {
+        finish_close(&app, &coordinator);
+        return Ok(());
+    }
+
+    let coordinator = Arc::clone(coordinator.inner());
+    let mut dialog = app
+        .dialog()
+        .message(
+            "This document has unsaved changes. Your changes will be lost if you don't save them.",
+        )
+        .title("Do you want to save the changes you made?")
+        .kind(MessageDialogKind::Warning)
+        .buttons(MessageDialogButtons::YesNoCancelCustom(
+            CLOSE_SAVE_LABEL.to_string(),
+            CLOSE_DONT_SAVE_LABEL.to_string(),
+            CLOSE_CANCEL_LABEL.to_string(),
+        ));
+    if let Some(window) = app.get_webview_window("main") {
+        dialog = dialog.parent(&window);
+    }
+
+    dialog.show_with_result(move |result| {
+        let label = match result {
+            MessageDialogResult::Custom(label) => label,
+            _ => String::new(),
+        };
+        if label == CLOSE_SAVE_LABEL {
+            let _ = app.emit(CLOSE_SAVE_EVENT, ());
+        } else if label == CLOSE_DONT_SAVE_LABEL {
+            let _ = app.emit(CLOSE_DISCARD_EVENT, ());
+        } else {
+            // Cancel, the dialog dismissed with Escape, or the window closed
+            // some other way. Every one of those means stay open.
+            cancel_close(&coordinator);
+        }
+    });
+    Ok(())
+}
+
+// The frontend's answer once it has actually tried to save or discard.
+//
+// should_close is decided entirely by the frontend: a save that hit a
+// conflict, failed, was cancelled, or raced against a newer edit leaves the
+// document dirty, and the frontend reports that back rather than this
+// command re-deriving it. Discard always reports true, because "Don't Save"
+// is a decision, not a failure to save.
+#[tauri::command]
+async fn complete_close_flow(
+    app: AppHandle,
+    should_close: bool,
+    coordinator: State<'_, Arc<CloseCoordinator>>,
+) -> Result<(), String> {
+    if should_close {
+        finish_close(&app, &coordinator);
+    } else {
+        cancel_close(&coordinator);
+    }
+    Ok(())
+}
+
 #[tauri::command]
 async fn stat_document(
     document_id: String,
@@ -441,24 +574,88 @@ async fn save_document_as(
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(Arc::new(DocumentRegistry::default()))
+        .manage(Arc::new(CloseCoordinator::default()))
         .invoke_handler(tauri::generate_handler![
             open_document,
             read_document,
             stat_document,
             save_document,
             save_document_as,
-            close_document
+            close_document,
+            report_close_readiness,
+            complete_close_flow
         ])
-        .run(tauri::generate_context!())
+        // Covers the red close button and Cmd+W (the default menu's Close
+        // Window item routes here too). Always prevented up front: closing
+        // for real happens only from finish_close, once the frontend has
+        // confirmed there is nothing left to protect.
+        .on_window_event(|window, event| {
+            if let WindowEvent::CloseRequested { api, .. } = event {
+                api.prevent_close();
+                let app = window.app_handle();
+                let coordinator = app.state::<Arc<CloseCoordinator>>();
+                request_close(app, &coordinator);
+            }
+        })
+        .build(tauri::generate_context!())
         .expect("error while running tauri application");
+
+    app.run(|app_handle, event| {
+        // Covers Cmd+Q and the Dock/menu-bar Quit item. On macOS this fires
+        // independently of WindowEvent::CloseRequested, so it needs the same
+        // guard rather than assuming the window-close path already ran.
+        //
+        // `code` is None only for an exit requested by user interaction.
+        // finish_close's own `app.exit(0)` raises this same event with
+        // `code: Some(0)` as it works its way through the runtime - without
+        // this check that request would hit prevent_exit and loop back into
+        // request_close forever, since the coordinator it just released would
+        // happily start a second round.
+        if let RunEvent::ExitRequested { api, code, .. } = event {
+            if code.is_none() {
+                api.prevent_exit();
+                let coordinator = app_handle.state::<Arc<CloseCoordinator>>();
+                request_close(app_handle, &coordinator);
+            }
+        }
+    });
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn close_coordinator_refuses_a_second_flow_until_the_first_ends() {
+        let coordinator = CloseCoordinator::default();
+
+        assert!(
+            coordinator.begin(),
+            "the first close attempt should start the flow"
+        );
+        assert!(
+            !coordinator.begin(),
+            "a second close signal must not start a second flow while one is in progress"
+        );
+
+        coordinator.end();
+
+        assert!(
+            coordinator.begin(),
+            "ending the flow must let a later close attempt start a fresh one"
+        );
+    }
+
+    #[test]
+    fn close_coordinator_starts_idle() {
+        // begin() must succeed on a brand new app launch, with no prior
+        // close attempt to have left it stuck.
+        let coordinator = CloseCoordinator::default();
+        assert!(coordinator.begin());
+    }
 
     #[test]
     fn conflict_preflight_leaves_the_external_version_untouched() {

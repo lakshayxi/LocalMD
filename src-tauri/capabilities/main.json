@@ -12,6 +12,10 @@
     "allow-stat-document",
     "allow-save-document",
     "allow-save-document-as",
-    "allow-close-document"
+    "allow-close-document",
+    "allow-report-close-readiness",
+    "allow-complete-close-flow",
+    "core:event:allow-listen",
+    "core:event:allow-unlisten"
   ]
 }

@@ -7,6 +7,8 @@ fn main() {
             "save_document",
             "save_document_as",
             "close_document",
+            "report_close_readiness",
+            "complete_close_flow",
         ]),
     ))
     .expect("failed to run the Tauri build script")

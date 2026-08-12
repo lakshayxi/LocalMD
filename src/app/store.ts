@@ -172,7 +172,17 @@ interface DocumentState {
   reloadFromDisk: () => Promise<void>;
   checkExternalChange: () => Promise<void>;
   dismissNotice: () => void;
-  close: () => void;
+  close: () => Promise<void>;
+  /**
+   * *Don't Save*, from the native close/quit alert.
+   *
+   * Unlike `confirmDiscard`, this never asks — the native alert already is
+   * the question, and asking again here would be a second confirmation for
+   * one decision. Unlike the accidental-teardown net `useNavigationGuard`
+   * writes, the reader chose this, so the draft must not be offered back
+   * next launch: it is discarded for real, not left as a recovery row.
+   */
+  discardForClose: () => Promise<void>;
   setAllowRemoteContent: (allow: boolean) => Promise<void>;
   setTheme: (theme: Theme) => void;
   setTypeface: (typeface: Typeface) => void;
@@ -315,16 +325,25 @@ function forgetDraft(
  * is a decision, and leaving a draft behind after someone has said "discard"
  * would make the recovery prompt an argument with the reader. The net catches
  * what you lose, not what you choose to throw away.
+ *
+ * Always awaited, never read as a plain boolean: the desktop build's dialog
+ * plugin replaces `window.confirm` with an async function the moment it
+ * initializes (Tauri has no synchronous IPC), so `!window.confirm(...)` reads
+ * a truthy Promise and always takes the "yes" branch there. The browser's own
+ * `confirm` returns a plain boolean, which `await` resolves to itself, so one
+ * awaited call is correct in both environments.
  */
-function confirmDiscard(
+async function confirmDiscard(
   set: (partial: Partial<DocumentState>) => void,
   get: () => DocumentState,
   discardDraft = true,
-): boolean {
+): Promise<boolean> {
   const { dirty, source } = get();
   if (!dirty || !source) return true;
 
-  if (!window.confirm(`"${source.name}" has unsaved changes. Discard them?`)) return false;
+  if (!(await window.confirm(`"${source.name}" has unsaved changes. Discard them?`))) {
+    return false;
+  }
 
   if (discardDraft) forgetDraft(set, get);
   return true;
@@ -605,7 +624,7 @@ export const useDocument = create<DocumentState>((set, get) => ({
   async open(source) {
     // Opening one document over another that is mid-edit loses the same work a
     // tab close would, and has to ask the same question.
-    if (!confirmDiscard(set, get)) return;
+    if (!(await confirmDiscard(set, get))) return;
 
     const previousSource = get().source;
     documentRevision += 1;
@@ -715,7 +734,7 @@ export const useDocument = create<DocumentState>((set, get) => ({
   async restoreDraft(draft, detachedSource) {
     // Restoring over a document that is itself mid-edit loses the same work a
     // close would, and has to ask the same question.
-    if (!confirmDiscard(set, get)) return;
+    if (!(await confirmDiscard(set, get))) return;
 
     const previousSource = get().source;
     documentRevision += 1;
@@ -942,7 +961,7 @@ export const useDocument = create<DocumentState>((set, get) => ({
     // Keep the recovery row until the replacement has actually been read. A
     // failed reload leaves the dirty document in place, so deleting its draft
     // before the read would silently remove its crash protection.
-    if (!confirmDiscard(set, get, false)) return;
+    if (!(await confirmDiscard(set, get, false))) return;
 
     documentRevision += 1;
 
@@ -1034,10 +1053,10 @@ export const useDocument = create<DocumentState>((set, get) => ({
     set({ notice: null });
   },
 
-  close() {
+  async close() {
     // Every close path runs through here — the wordmark, the palette, and
     // whatever gets added later.
-    if (!confirmDiscard(set, get)) return;
+    if (!(await confirmDiscard(set, get))) return;
 
     const source = get().source;
     documentRevision += 1;
@@ -1076,6 +1095,21 @@ export const useDocument = create<DocumentState>((set, get) => ({
     // has to be current — a row this close just discarded must not still be sat
     // there waiting to be restored.
     void get().refreshDrafts();
+  },
+
+  async discardForClose() {
+    // Cancel first, same as forgetDraft: a flush left scheduled by the last
+    // few keystrokes must not land after this and put the discarded text
+    // back into storage.
+    cancelDraftFlush();
+
+    const { draftId } = get();
+    set({ dirty: false, draftId: null });
+
+    // Awaited rather than fire-and-forget: the caller is about to tell the
+    // native layer it is safe to close, and this is the one thing standing
+    // between that answer and the draft still being on disk to offer back.
+    if (draftId) await discardDraft(draftId);
   },
 
   async setAllowRemoteContent(allow) {
