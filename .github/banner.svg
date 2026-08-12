@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 300" width="1200" height="300" role="img" aria-label="LocalMD — Markdown stays local.">
+  <rect width="1200" height="300" fill="#f5f2ea"/>
+
+  <svg x="70" y="50" width="200" height="200" viewBox="0 0 1024 1024">
+    <rect x="64" y="54" width="896" height="896" rx="214" fill="#20201d"/>
+    <rect x="244" y="214" width="536" height="596" rx="64" fill="#f5f2ea"/>
+    <g fill="none" stroke="#d66f4a" stroke-linecap="round" stroke-width="28">
+      <path d="M342 342h104M326 420h104"/>
+      <path d="M382 306l-34 150M458 306l-34 150"/>
+    </g>
+    <g fill="#4a4944">
+      <rect x="512" y="324" width="174" height="26" rx="13"/>
+      <rect x="512" y="394" width="128" height="26" rx="13" opacity=".76"/>
+      <rect x="338" y="548" width="348" height="24" rx="12" opacity=".88"/>
+      <rect x="338" y="614" width="294" height="24" rx="12" opacity=".64"/>
+      <rect x="338" y="680" width="224" height="24" rx="12" opacity=".42"/>
+    </g>
+    <text x="588" y="744" fill="#d66f4a" font-family="'Bradley Hand', 'Noteworthy', cursive"
+      font-size="92" font-weight="700" letter-spacing="-5" transform="rotate(-4 650 720)">.md</text>
+  </svg>
+
+  <text x="310" y="168" font-family="-apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif"
+    font-size="76" font-weight="700" letter-spacing="-1" fill="#1a1a18">LocalMD</text>
+  <text x="313" y="210" font-family="-apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif"
+    font-size="24" fill="#5f5f59">Markdown stays local.</text>
+
+  <rect x="313" y="230" width="46" height="4" rx="2" fill="#d66f4a"/>
+</svg>
